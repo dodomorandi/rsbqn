@@ -1,5 +1,5 @@
-use bacon_rajan_cc::{Trace, Tracer, /*collect_cycles*/};
-use crate::schema::{V,Code,Block,EnvUnboxed,Tr2,Tr3,D1,D2,BlockInst,A};
+use crate::schema::{Block, BlockInst, Code, EnvUnboxed, Tr2, Tr3, A, D1, D2, V};
+use bacon_rajan_cc::{Trace, Tracer /*collect_cycles*/};
 
 impl Trace for V {
     fn trace(&self, _tracer: &mut Tracer) {

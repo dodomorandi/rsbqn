@@ -1,9 +1,11 @@
-pub mod schema;
 mod late_init;
+pub mod provide;
+pub mod schema;
 mod trace;
 pub mod vm;
-pub mod provide;
-pub mod gen { pub mod code; }
+pub mod gen {
+    pub mod code;
+}
 pub mod fmt;
 
 // https://docs.rs/env_logger/0.7.1/env_logger/#capturing-logs-in-tests
