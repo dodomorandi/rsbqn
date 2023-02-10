@@ -68,7 +68,7 @@ fn derv(env: &Env, code: &Cc<Code>, block: &Cc<Block>, stack: &mut Stack) -> Res
 }
 
 fn list(ravel: Vec<V>, fill: Option<V>) -> Vs {
-    let shape = vec![ravel.len() as usize];
+    let shape = vec![ravel.len()];
     Vs::V(V::A(Cc::new(A::new(ravel, shape, fill))))
 }
 // determines list fill
@@ -91,7 +91,7 @@ pub fn vm(
     bodies: Option<&Vec<usize>>,
     body_id: Option<usize>,
     mut pos: usize,
-    mut stack: &mut Stack,
+    stack: &mut Stack,
 ) -> Result<Vs, Ve> {
     #[cfg(feature = "debug-ops")]
     incr(stack);
@@ -128,7 +128,7 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("DFND", pos - 2, format!("{}", &x), stack);
-                let r = match derv(&env, &code, &code.blocks[x], &mut stack) {
+                let r = match derv(env, code, &code.blocks[x], stack) {
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
@@ -206,7 +206,7 @@ pub fn vm(
                 let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
                 unsafe { stack.s.set_len(l - 2) };
                 let r = match call(
-                    &mut stack,
+                    stack,
                     1,
                     Vn(Some(&f.into_v().unwrap())),
                     Vn(Some(&x.into_v().unwrap())),
@@ -235,7 +235,7 @@ pub fn vm(
                 let r = match &x.as_v().unwrap() {
                     V::Nothing => x,
                     _ => match call(
-                        &mut stack,
+                        stack,
                         1,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
@@ -264,7 +264,7 @@ pub fn vm(
                 let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
                 unsafe { stack.s.set_len(l - 3) };
                 let r = match call(
-                    &mut stack,
+                    stack,
                     2,
                     Vn(Some(&f.into_v().unwrap())),
                     Vn(Some(&x.into_v().unwrap())),
@@ -294,7 +294,7 @@ pub fn vm(
                 let r = match (&x.as_v().unwrap(), &w.as_v().unwrap()) {
                     (V::Nothing, _) => x,
                     (_, V::Nothing) => match call(
-                        &mut stack,
+                        stack,
                         1,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
@@ -304,7 +304,7 @@ pub fn vm(
                         Err(e) => break Err(e),
                     },
                     _ => match call(
-                        &mut stack,
+                        stack,
                         2,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
@@ -390,7 +390,7 @@ pub fn vm(
                 let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
                 let m = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
                 unsafe { stack.s.set_len(l - 2) };
-                let r = match call1(&mut stack, m.into_v().unwrap(), f.into_v().unwrap()) {
+                let r = match call1(stack, m.into_v().unwrap(), f.into_v().unwrap()) {
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
@@ -413,7 +413,7 @@ pub fn vm(
                 let g = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
                 unsafe { stack.s.set_len(l - 3) };
                 let r = match call2(
-                    &mut stack,
+                    stack,
                     m.into_v().unwrap(),
                     f.into_v().unwrap(),
                     g.into_v().unwrap(),
@@ -500,7 +500,7 @@ pub fn vm(
                                         unsafe { code.body_ids.get_unchecked(b[id + 1]) };
                                     break vm(
                                         &env.reinit(*locals),
-                                        &code,
+                                        code,
                                         Some(b),
                                         Some(id + 1),
                                         *p,
@@ -566,7 +566,7 @@ pub fn vm(
                                 let (p, locals) = unsafe { code.body_ids.get_unchecked(b[id + 1]) };
                                 break vm(
                                     &env.reinit(*locals),
-                                    &code,
+                                    code,
                                     Some(b),
                                     Some(id + 1),
                                     *p,
@@ -631,7 +631,7 @@ pub fn vm(
                 let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
                 unsafe { stack.s.set_len(l - 3) };
                 let v = match call(
-                    &mut stack,
+                    stack,
                     2,
                     Vn(Some(&f.into_v().unwrap())),
                     Vn(Some(&x.into_v().unwrap())),
@@ -659,7 +659,7 @@ pub fn vm(
                 let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
                 unsafe { stack.s.set_len(l - 2) };
                 let v = match call(
-                    &mut stack,
+                    stack,
                     1,
                     Vn(Some(&f.into_v().unwrap())),
                     Vn(Some(&i.get())),
@@ -840,7 +840,7 @@ pub fn prog(
                     .map(|e| match e.as_a().unwrap().r.iter().collect_tuple() {
                         Some((V::Scalar(typ), V::Scalar(imm), V::Scalar(body))) => (
                             u8::from_f64(*typ).unwrap(),
-                            if 1.0 == *imm { true } else { false },
+                            1.0 == *imm,
                             Bodies::Comp(usize::from_f64(*body).unwrap()),
                         ),
                         Some((V::Scalar(typ), V::Scalar(imm), V::A(bodies))) => {
@@ -849,7 +849,7 @@ pub fn prog(
                                     let amb = &bodies.r[0];
                                     (
                                         u8::from_f64(*typ).unwrap(),
-                                        if 1.0 == *imm { true } else { false },
+                                        1.0 == *imm,
                                         Bodies::Head(
                                             amb.as_a()
                                                 .unwrap()
@@ -867,7 +867,7 @@ pub fn prog(
                                     let (mon, dya) = bodies.r.iter().collect_tuple().unwrap();
                                     (
                                         u8::from_f64(*typ).unwrap(),
-                                        if 1.0 == *imm { true } else { false },
+                                        1.0 == *imm,
                                         Bodies::Exp(
                                             mon.as_a()
                                                 .unwrap()
@@ -923,7 +923,7 @@ pub fn prog(
 }
 
 pub fn formatter(root: Option<&Env>, stack: &mut Stack, runtime: &V) -> Result<V, Ve> {
-    let formatter = run(root, stack, f(&runtime)).expect("couldnt load fmt");
+    let formatter = run(root, stack, f(runtime)).expect("couldnt load fmt");
     let fmt_fns = V::A(Cc::new(A::new(
         vec![
             V::Fn(Fn(typ), None),
@@ -955,7 +955,7 @@ pub fn run_in_place(env: &Env, stack: &mut Stack, code: Cc<Code>) -> Result<V, V
         Bodies::Head(_) => panic!("cant run Head bodies"),
         Bodies::Exp(_, _) => panic!("cant run Expanded bodies"),
     };
-    match vm(&env, &code, None, None, pos, stack) {
+    match vm(env, &code, None, None, pos, stack) {
         Ok(r) => Ok(r.into_v().unwrap()),
         Err(e) => Err(e),
     }

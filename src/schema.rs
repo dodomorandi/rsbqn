@@ -178,8 +178,8 @@ impl Calleable for V {
                         Ok(l) => g.call(
                             stack,
                             2,
-                            Vn(Some(&r.as_v().unwrap())),
-                            Vn(Some(&l.as_v().unwrap())),
+                            Vn(Some(r.as_v().unwrap())),
+                            Vn(Some(l.as_v().unwrap())),
                         ),
                         Err(e) => Err(e),
                     },
@@ -217,7 +217,7 @@ impl Vs {
         match self {
             Vs::Slot(env, id) => env.get(*id),
             Vs::Ar(a) => {
-                let shape = vec![a.r.len() as usize];
+                let shape = vec![a.r.len()];
                 let ravel =
                     a.r.iter()
                         .map(|e| match e {
@@ -364,9 +364,9 @@ impl Code {
         body_ids: Vec<(usize, usize)>,
     ) -> Cc<Self> {
         let code = Cc::new(Self {
-            bc: bc,
-            objs: objs,
-            body_ids: body_ids,
+            bc,
+            objs,
+            body_ids,
             blocks: LateInit::default(),
         });
         let blocks_derv = blocks_raw
@@ -374,9 +374,9 @@ impl Code {
             .map(|block| match block {
                 (typ, imm, bodies) => {
                     let b = Block {
-                        typ: typ,
-                        imm: imm,
-                        bodies: bodies,
+                        typ,
+                        imm,
+                        bodies,
                         code: LateInit::default(),
                     };
                     b.code.init(code.clone());
@@ -446,7 +446,7 @@ impl Env {
         let env = EnvUnboxed {
             parent: parent.cloned(),
             vars: UnsafeCell::new(vars),
-            num_args: num_args,
+            num_args,
             init_args: args,
         };
         Self(Cc::new(env))
@@ -497,7 +497,7 @@ impl Env {
     }
     pub fn set(&self, d: bool, id: usize, v: &V) -> Result<(), Ve> {
         match self {
-            Env(e) => match d == unsafe { &(*e.vars.get()).get_unchecked(id) }.is_none() {
+            Env(e) => match d == unsafe { (*e.vars.get()).get_unchecked(id) }.is_none() {
                 false => Err(Ve::S("unexpected slot value during assignment")),
                 true => {
                     unsafe { *(*e.vars.get()).get_unchecked_mut(id) = Some(v.clone()) };
@@ -595,7 +595,7 @@ impl BlockInst {
                     Some(&self.parent),
                     &self.def,
                     arity,
-                    Some(vec![Some(m.clone()), Some(f.clone())]),
+                    Some(vec![Some(m), Some(f)]),
                 );
                 vm(&env, &self.def.code, bodies, body_id, pos, stack)
             }
@@ -624,7 +624,7 @@ impl BlockInst {
                     Some(&self.parent),
                     &self.def,
                     arity,
-                    Some(vec![Some(m.clone()), Some(f.clone()), Some(g.clone())]),
+                    Some(vec![Some(m), Some(f), Some(g)]),
                 );
                 vm(&env, &self.def.code, None, None, pos, stack)
             }
@@ -646,9 +646,9 @@ pub struct A {
 impl A {
     pub fn new(r: Vec<V>, sh: Vec<usize>, fill: Option<V>) -> Self {
         Self {
-            r: r,
-            sh: sh,
-            fill: fill,
+            r,
+            sh,
+            fill,
         }
     }
 }
@@ -662,7 +662,7 @@ pub struct Ar {
 impl Ar {
     pub fn new(r: Vec<Vs>) -> Self {
         let sh = vec![r.len()];
-        Self { r: r, sh: sh }
+        Self { r, sh }
     }
 }
 
@@ -738,8 +738,8 @@ pub fn new_string(n: &str) -> V {
     let ravel = n
         .to_string()
         .chars()
-        .map(|c| V::Char(c))
+        .map(V::Char)
         .collect::<Vec<V>>();
-    let shape = vec![ravel.len() as usize];
+    let shape = vec![ravel.len()];
     V::A(Cc::new(A::new(ravel, shape, Some(new_char(' ')))))
 }
