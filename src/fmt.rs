@@ -1,5 +1,5 @@
 use crate::schema::{Fn, Stack, Ve, Vs, A, R1, R2, V};
-use log::{debug, error, info, log_enabled, trace, Level};
+use log::{debug};
 use std::fmt::{Debug, Display, Formatter, Result};
 
 pub fn fmt_stack(stack: &mut Stack) -> String {

@@ -1,19 +1,18 @@
-use crate::fmt::{dbg_stack_in, dbg_stack_out};
-use crate::gen::code::{c, f, r0, r1};
-use crate::init_log;
+
+use crate::gen::code::{f, r0, r1};
+
 use crate::provide::{decompose, fmtnum, glyph, prim_ind, provide, typ};
 use crate::schema::{
-    new_scalar, new_string, Ar, Block, BlockInst, Bodies, Calleable, Code, Compiler, Env, Fn, Prog,
-    Runtime, Stack, Stacker, Tr2, Tr3, Ve, Vn, Vs, A, D1, D2, V,
+    new_scalar, Ar, Block, BlockInst, Bodies, Calleable, Code, Env, Fn, Stack, Stacker, Tr2, Tr3, Ve, Vn, Vs, A, D1, D2, V,
 };
 use bacon_rajan_cc::Cc;
-use std::collections::VecDeque;
-use std::error::Error;
-use std::ops::Deref;
+
+
+
 use std::ptr;
 //use std::panic;
 use itertools::Itertools;
-use log::{debug, error, info, log_enabled, trace, Level};
+use log::{info};
 use num_traits::FromPrimitive;
 
 pub fn call(stack: &mut Stack, arity: usize, a: Vn, x: Vn, w: Vn) -> Result<Vs, Ve> {
@@ -559,7 +558,7 @@ pub fn vm(
                 let v = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
                 unsafe { stack.s.set_len(l - 2) };
                 match i.set(true, v.as_v().unwrap()) {
-                    Ok(r) => (), // continue
+                    Ok(_r) => (), // continue
                     Err(_) => {
                         // move to next body in list
                         match (bodies, body_id) {
@@ -698,7 +697,7 @@ pub fn runtime(root: Option<&Env>, stack: &mut Stack) -> Result<V, Ve> {
 
             // Copy-On-Write. Use two assignments to prevent tmp values freed while in use.
             let mut prims = runtime.into_a().unwrap();
-            let mut mut_prims = prims.make_unique();
+            let mut_prims = prims.make_unique();
 
             // set primitive indices
             for i in 0..mut_prims.r.len() - 1 {
@@ -736,7 +735,7 @@ pub fn runtime(root: Option<&Env>, stack: &mut Stack) -> Result<V, Ve> {
     }
 }
 
-pub fn sysfns(arity: usize, x: Vn, w: Vn) -> Result<Vs, Ve> {
+pub fn sysfns(_arity: usize, _x: Vn, _w: Vn) -> Result<Vs, Ve> {
     Ok(Vs::V(V::A(Cc::new(A::new(vec![], vec![0], None)))))
 }
 
@@ -941,8 +940,8 @@ pub fn formatter(root: Option<&Env>, stack: &mut Stack, runtime: &V) -> Result<V
         .unwrap()
         .into_a()
         .unwrap();
-    let mut fmt1 = fmt.make_unique();
-    let repr = fmt1.r.pop().unwrap();
+    let fmt1 = fmt.make_unique();
+    let _repr = fmt1.r.pop().unwrap();
     let fmt1 = fmt1.r.pop().unwrap();
     Ok(fmt1)
 }

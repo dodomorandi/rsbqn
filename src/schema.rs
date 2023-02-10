@@ -2,10 +2,10 @@ use crate::late_init::LateInit;
 use crate::vm::vm;
 use bacon_rajan_cc::Cc;
 use enum_as_inner::EnumAsInner;
-use log::{debug, error, info, log_enabled, trace, Level};
-use num_traits::cast::FromPrimitive;
+
+
 use std::cell::UnsafeCell;
-use std::iter::FromIterator;
+
 use std::ops::Deref;
 use std::ptr;
 
@@ -238,7 +238,7 @@ impl Vs {
             }
             Vs::Ar(a) => match v {
                 V::A(va) => {
-                    if (va.sh != a.sh) {
+                    if va.sh != a.sh {
                         Err(Ve::S("target and value shapes don't match"))
                     } else {
                         for i in 0..a.r.len() {
@@ -722,7 +722,7 @@ pub fn body_pos(b: &Cc<BlockInst>, arity: usize) -> usize {
 }
 pub fn bodies(b: &Cc<BlockInst>, arity: usize) -> (Option<&Vec<usize>>, Option<usize>) {
     match &b.def.bodies {
-        Bodies::Comp(body) => (None, None),
+        Bodies::Comp(_body) => (None, None),
         Bodies::Head(amb) => (Some(amb), Some(0)),
         Bodies::Exp(mon, dya) => match arity {
             1 => (Some(mon), Some(0)),

@@ -4,12 +4,12 @@ use crate::schema::{
 };
 use crate::vm::call;
 use bacon_rajan_cc::Cc;
-use itertools::Itertools;
-use log::{debug, error, info, log_enabled, trace, Level};
+
+use log::{debug};
 use num_traits::cast::FromPrimitive;
 use std::char;
-use std::cmp::max;
-use std::iter::FromIterator;
+
+
 use std::ops::Deref;
 use std::ops::Mul;
 
@@ -589,7 +589,7 @@ fn scan(stack: &mut Stack, arity: usize, f: Vn, x: Vn, w: Vn) -> Result<Vs, Ve> 
                         r[i] = match call(stack, 2, Vn(f.0), Vn(Some(&a.r[i])), Vn(Some(&r[i - c])))
                         {
                             Ok(v) => v.as_v().unwrap().clone(),
-                            Err(e) => panic!("monadic scan call failed"),
+                            Err(_e) => panic!("monadic scan call failed"),
                         };
                         i += 1;
                     }
@@ -636,7 +636,7 @@ fn scan(stack: &mut Stack, arity: usize, f: Vn, x: Vn, w: Vn) -> Result<Vs, Ve> 
                                 Vn(Some(&wa.r[i])),
                             ) {
                                 Ok(v) => v.as_v().unwrap().clone(),
-                                Err(e) => panic!("dyadic scan call failed"),
+                                Err(_e) => panic!("dyadic scan call failed"),
                             };
                             i += 1;
                         }
@@ -649,7 +649,7 @@ fn scan(stack: &mut Stack, arity: usize, f: Vn, x: Vn, w: Vn) -> Result<Vs, Ve> 
                                 Vn(Some(&r[i - c])),
                             ) {
                                 Ok(v) => v.as_v().unwrap().clone(),
-                                Err(e) => panic!("dyadic scan call failed"),
+                                Err(_e) => panic!("dyadic scan call failed"),
                             };
                             i += 1;
                         }
@@ -835,7 +835,7 @@ pub fn prim_ind(arity: usize, x: Vn, _w: Vn) -> Result<Vs, Ve> {
     }
 }
 
-pub fn glyph(arity: usize, x: Vn, w: Vn) -> Result<Vs, Ve> {
+pub fn glyph(_arity: usize, x: Vn, _w: Vn) -> Result<Vs, Ve> {
     let glyphs = "+-×÷⋆√⌊⌈|¬∧∨<>≠=≤≥≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉/⍋⍒⊏⊑⊐⊒∊⍷⊔!˙˜˘¨⌜⁼´˝`∘○⊸⟜⌾⊘◶⎉⚇⍟⎊";
     let fmt = match x.0.unwrap() {
         V::BlockInst(_b, Some(prim)) => new_char(glyphs.chars().nth(*prim).unwrap()),
@@ -853,7 +853,7 @@ pub fn glyph(arity: usize, x: Vn, w: Vn) -> Result<Vs, Ve> {
     Ok(Vs::V(fmt))
 }
 
-pub fn fmtnum(arity: usize, x: Vn, w: Vn) -> Result<Vs, Ve> {
+pub fn fmtnum(arity: usize, x: Vn, _w: Vn) -> Result<Vs, Ve> {
     match arity {
         1 => match unsafe { x.0.unwrap_unchecked() } {
             V::Scalar(n) => Ok(Vs::V(new_string(&*format!("{}", *n)))),
