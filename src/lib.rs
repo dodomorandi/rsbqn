@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod late_init;
 pub mod provide;
 pub mod schema;

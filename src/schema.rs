@@ -3,11 +3,9 @@ use crate::vm::vm;
 use bacon_rajan_cc::Cc;
 use enum_as_inner::EnumAsInner;
 
-
-use std::cell::UnsafeCell;
-
+use std::cell::RefCell;
+use std::fmt;
 use std::ops::Deref;
-use std::ptr;
 
 // Traits
 pub trait Calleable {
@@ -17,28 +15,51 @@ pub trait Decoder {
     fn to_f64(&self) -> f64;
 }
 pub trait Stacker {
-    fn push_unchecked(&mut self, v: Vs);
-    fn pop_unchecked(&mut self) -> Vs;
-    fn pop_list_unchecked(&mut self, n: usize) -> Vec<V>;
-    fn pop_ref_list_unchecked(&mut self, n: usize) -> Vec<Vs>;
+    fn pop_list(&mut self, n: usize) -> Vec<V>;
+    fn pop_ref_list(&mut self, n: usize) -> Vec<Vs>;
 }
 
 #[derive(Clone)]
 pub struct Fn(pub fn(usize, Vn, Vn) -> Result<Vs, Ve>);
+
+impl fmt::Debug for Fn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Fn").field(&"fn").finish()
+    }
+}
+
 impl PartialEq for Fn {
     fn eq(&self, other: &Self) -> bool {
         self.0 as usize == other.0 as usize
     }
 }
+
 #[derive(Clone)]
 pub struct R1(pub fn(&mut Stack, usize, Vn, Vn, Vn) -> Result<Vs, Ve>);
+
+impl fmt::Debug for R1 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("R1").field(&"fn").finish()
+    }
+}
+
 impl PartialEq for R1 {
     fn eq(&self, other: &Self) -> bool {
         self.0 as usize == other.0 as usize
     }
 }
+
+type R2Fn = fn(&mut Stack, usize, Vn, Vn, Vn, Vn) -> Result<Vs, Ve>;
+
 #[derive(Clone)]
-pub struct R2(pub fn(&mut Stack, usize, Vn, Vn, Vn, Vn) -> Result<Vs, Ve>);
+pub struct R2(pub R2Fn);
+
+impl fmt::Debug for R2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("R2").field(&"fn").finish()
+    }
+}
+
 impl PartialEq for R2 {
     fn eq(&self, other: &Self) -> bool {
         self.0 as usize == other.0 as usize
@@ -65,14 +86,10 @@ pub enum V {
 }
 impl V {
     pub fn is_fn(&self) -> bool {
-        match self {
-            V::BlockInst(_b, _prim) => true,
-            V::UserMd1(_b, _a, _prim) => true,
-            V::UserMd2(_b, _a, _prim) => true,
-            V::Tr2(_tr2, _prim) => true,
-            V::Tr3(_tr3, _prim) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            V::BlockInst(..) | V::UserMd1(..) | V::UserMd2(..) | V::Tr2(..) | V::Tr3(..)
+        )
     }
 }
 impl Decoder for i64 {
@@ -273,18 +290,27 @@ impl Default for Vs {
 pub type Vh = Option<V>;
 
 // Value error
+#[derive(Debug)]
 pub enum Ve {
     S(&'static str),
     V(V),
 }
 
 // Stack
+#[derive(Debug)]
 pub struct Stack {
     pub s: Vec<Vs>,
     pub fp: usize,
 }
 impl Stack {
+    #[inline]
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for Stack {
+    fn default() -> Self {
         Self {
             s: Vec::with_capacity(128),
             fp: 0,
@@ -292,48 +318,15 @@ impl Stack {
     }
 }
 impl Stacker for Vec<Vs> {
-    fn push_unchecked(&mut self, v: Vs) {
-        unsafe {
-            let l = self.len();
-            let end = self.as_mut_ptr().add(l);
-            ptr::write(end, v);
-            self.set_len(l + 1);
-        }
+    fn pop_list(&mut self, x: usize) -> Vec<V> {
+        let len = self.len();
+        self.drain((len - x)..)
+            .map(|vs| vs.into_v().unwrap())
+            .collect()
     }
-    fn pop_unchecked(&mut self) -> Vs {
-        unsafe {
-            self.set_len(self.len() - 1);
-            ptr::read(self.as_ptr().add(self.len()))
-        }
-    }
-    fn pop_list_unchecked(&mut self, x: usize) -> Vec<V> {
-        let l = self.len();
-        let mut acc: Vec<V> = vec![V::Nothing; x];
-        unsafe {
-            for i in (0..x).rev() {
-                *acc.get_unchecked_mut(i) = ptr::read(self.as_ptr().add(l - x + i))
-                    .into_v()
-                    .unwrap_unchecked();
-                let end = self.as_mut_ptr().add(l - x + i);
-                ptr::write(end, Vs::Nothing);
-            }
-            self.set_len(l - x);
-        }
-        acc
-    }
-    fn pop_ref_list_unchecked(&mut self, x: usize) -> Vec<Vs> {
-        let l = self.len();
-        let mut acc: Vec<Vs> = vec![Vs::Nothing; x];
-        unsafe {
-            acc.set_len(x);
-            for i in (0..x).rev() {
-                *acc.get_unchecked_mut(i) = ptr::read(self.as_ptr().add(l - x + i));
-                let end = self.as_mut_ptr().add(l - x + i);
-                ptr::write(end, Vs::Nothing);
-            }
-            self.set_len(l - x);
-        }
-        acc
+    fn pop_ref_list(&mut self, x: usize) -> Vec<Vs> {
+        let len = self.len();
+        self.drain((len - x)..).collect()
     }
 }
 
@@ -371,17 +364,16 @@ impl Code {
         });
         let blocks_derv = blocks_raw
             .into_iter()
-            .map(|block| match block {
-                (typ, imm, bodies) => {
-                    let b = Block {
-                        typ,
-                        imm,
-                        bodies,
-                        code: LateInit::default(),
-                    };
-                    b.code.init(code.clone());
-                    Cc::new(b)
-                }
+            .map(|block| {
+                let (typ, imm, bodies) = block;
+                let b = Block {
+                    typ,
+                    imm,
+                    bodies,
+                    code: LateInit::default(),
+                };
+                b.code.init(code.clone());
+                Cc::new(b)
             })
             .collect::<Vec<Cc<Block>>>();
         code.blocks.init(blocks_derv);
@@ -402,7 +394,7 @@ pub struct Block {
 #[derive(Default, Debug)]
 pub struct EnvUnboxed {
     pub parent: Option<Env>,
-    pub vars: UnsafeCell<Vec<Vh>>,
+    pub vars: RefCell<Vec<Vh>>,
     pub num_args: usize,
     pub init_args: Option<Vec<Vh>>,
 }
@@ -416,17 +408,12 @@ impl Env {
         arity: usize,
         args: Option<Vec<Vh>>,
     ) -> Self {
-        // index into bodies with unsafe code.
-        // we are assuming the compiler has produced correct body indexing
-        // environment creation is in the outskirts of the hot-path.
-        // as such, this might be changed back to using safe code depending
-        // on how headers are implemented
         let (_pos, locals) = match &block.bodies {
-            Bodies::Comp(b) => unsafe { *block.code.body_ids.get_unchecked(*b) },
-            Bodies::Head(amb) => unsafe { *block.code.body_ids.get_unchecked(amb[0]) },
+            Bodies::Comp(b) => *block.code.body_ids.get(*b).unwrap(),
+            Bodies::Head(amb) => *block.code.body_ids.get(amb[0]).unwrap(),
             Bodies::Exp(mon, dya) => match arity {
-                1 => unsafe { *block.code.body_ids.get_unchecked(mon[0]) },
-                2 => unsafe { *block.code.body_ids.get_unchecked(dya[0]) },
+                1 => *block.code.body_ids.get(mon[0]).unwrap(),
+                2 => *block.code.body_ids.get(dya[0]).unwrap(),
                 n => panic!("invalid arity for deferred block {}", n),
             },
         };
@@ -445,7 +432,7 @@ impl Env {
         };
         let env = EnvUnboxed {
             parent: parent.cloned(),
-            vars: UnsafeCell::new(vars),
+            vars: RefCell::new(vars),
             num_args,
             init_args: args,
         };
@@ -468,7 +455,7 @@ impl Env {
                 };
                 Self(Cc::new(EnvUnboxed {
                     parent: env.parent.clone(),
-                    vars: UnsafeCell::new(vars),
+                    vars: RefCell::new(vars),
                     num_args: env.num_args,
                     init_args: env.init_args.clone(),
                 }))
@@ -478,18 +465,16 @@ impl Env {
     pub fn new_root() -> Self {
         let env = EnvUnboxed {
             parent: None,
-            vars: UnsafeCell::new(vec![]),
+            vars: RefCell::new(vec![]),
             num_args: 0,
             init_args: None,
         };
         Self(Cc::new(env))
     }
-    // get, set, and get_drop use unsafe code
-    // we are assuming that the compiler is correctly indexing locals
-    // we are using unsafe because interacting with the heap is in the hot-path of the vm
+
     pub fn get(&self, id: usize) -> V {
         match self {
-            Env(e) => match unsafe { &(*e.vars.get()).get_unchecked(id) } {
+            Env(e) => match e.vars.borrow().get(id).unwrap() {
                 Some(v) => v.clone(),
                 None => panic!("heap slot is undefined"),
             },
@@ -497,23 +482,27 @@ impl Env {
     }
     pub fn set(&self, d: bool, id: usize, v: &V) -> Result<(), Ve> {
         match self {
-            Env(e) => match d == unsafe { (*e.vars.get()).get_unchecked(id) }.is_none() {
-                false => Err(Ve::S("unexpected slot value during assignment")),
-                true => {
-                    unsafe { *(*e.vars.get()).get_unchecked_mut(id) = Some(v.clone()) };
-                    Ok(())
+            Env(e) => {
+                let slot_is_none = e.vars.borrow().get(id).unwrap().is_none();
+                match d == slot_is_none {
+                    false => Err(Ve::S("unexpected slot value during assignment")),
+                    true => {
+                        let v = v.clone();
+                        *e.vars.borrow_mut().get_mut(id).unwrap() = Some(v);
+                        Ok(())
+                    }
                 }
-            },
+            }
         }
     }
     pub fn get_drop(&self, id: usize) -> V {
         match self {
             Env(e) => {
-                let r = match unsafe { &(*e.vars.get()).get_unchecked(id) } {
+                let r = match e.vars.borrow().get(id).unwrap() {
                     Some(v) => v.clone(),
                     None => panic!("heap slot is undefined"),
                 };
-                unsafe { drop((*e.vars.get()).get_unchecked_mut(id)) };
+                *e.vars.borrow_mut().get_mut(id).unwrap() = None;
                 r
             }
         }
@@ -533,16 +522,18 @@ impl Env {
     pub fn extend(&self, vars: usize) {
         match self {
             Env(e) => {
-                let vars_exclusive: &mut Vec<Vh> = unsafe { &mut *e.vars.get() };
-                vars_exclusive.append(&mut vec![None; vars]);
+                e.vars
+                    .borrow_mut()
+                    .extend(std::iter::repeat(None).take(vars));
             }
         }
     }
     pub fn to_vars(&self) -> V {
         match self {
             Env(e) => {
-                let vars_exclusive: &Vec<Vh> = unsafe { &*e.vars.get() };
-                let ravel = vars_exclusive
+                let ravel = e
+                    .vars
+                    .borrow()
                     .iter()
                     .map(|e| match e {
                         Some(s) => s.clone(),
@@ -645,11 +636,7 @@ pub struct A {
 }
 impl A {
     pub fn new(r: Vec<V>, sh: Vec<usize>, fill: Option<V>) -> Self {
-        Self {
-            r,
-            sh,
-            fill,
-        }
+        Self { r, sh, fill }
     }
 }
 
@@ -735,11 +722,7 @@ pub fn new_char(n: char) -> V {
     V::Char(n)
 }
 pub fn new_string(n: &str) -> V {
-    let ravel = n
-        .to_string()
-        .chars()
-        .map(V::Char)
-        .collect::<Vec<V>>();
+    let ravel = n.to_string().chars().map(V::Char).collect::<Vec<V>>();
     let shape = vec![ravel.len()];
     V::A(Cc::new(A::new(ravel, shape, Some(new_char(' ')))))
 }

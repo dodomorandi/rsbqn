@@ -1,11 +1,9 @@
 use bacon_rajan_cc::Cc;
-use core::f64::{INFINITY, NEG_INFINITY};
 use log::info;
 use rsbqn::fmt::{fmt_err, fmt_result};
-use rsbqn::gen::code::{c, f, r0, r1};
+use rsbqn::gen::code::c;
 use rsbqn::init_log;
-use rsbqn::provide::{decompose, prim_ind, provide};
-use rsbqn::schema::{new_char, new_scalar, new_string, Bodies, Code, Env, Stack, Ve, Vn, Vs, A, V};
+use rsbqn::schema::{new_string, Env, Stack, Ve, Vn, A, V};
 use rsbqn::vm::{call, formatter, prog, run, run_in_place, runtime};
 use rustyline::error::ReadlineError;
 use rustyline::{Editor, Result};

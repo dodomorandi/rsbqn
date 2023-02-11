@@ -1,6 +1,6 @@
-use crate::schema::{Fn, Stack, Ve, Vs, A, R1, R2, V};
-use log::{debug};
-use std::fmt::{Debug, Display, Formatter, Result};
+use crate::schema::{Stack, Ve, Vs, A, V};
+use log::debug;
+use std::fmt::{Display, Formatter, Result};
 
 pub fn fmt_stack(stack: &mut Stack) -> String {
     stack
@@ -10,12 +10,12 @@ pub fn fmt_stack(stack: &mut Stack) -> String {
         .fold(String::new(), |acc, num| acc + &num.to_string() + ";")
 }
 
-pub fn fmt_array(a: &Vec<V>) -> String {
+pub fn fmt_array(a: &[V]) -> String {
     a.iter()
         .fold(String::new(), |acc, num| acc + &num.to_string() + ",")
 }
 
-pub fn fmt_err(a: &Vec<V>) -> String {
+pub fn fmt_err(a: &[V]) -> String {
     a.iter()
         .fold(String::new(), |acc, num| acc + &num.to_string())
 }
@@ -25,7 +25,7 @@ pub fn fmt_result(a: &A) -> String {
     for i in 0..a.r.len() {
         acc.push(match &a.r[i] {
             V::Char(c) => *c,
-            V::Scalar(0.0) => ' ',
+            V::Scalar(x) if *x == 0.0 => ' ',
             _ => panic!("cant fmt type"),
         })
     }
@@ -79,30 +79,6 @@ impl Display for Vs {
     }
 }
 impl Display for Ve {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        match self {
-            Ve::V(v) => write!(f, "{}", v),
-            Ve::S(s) => write!(f, "{}", s),
-        }
-    }
-}
-
-impl Debug for Fn {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{:?}", self)
-    }
-}
-impl Debug for R1 {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{:?}", self)
-    }
-}
-impl Debug for R2 {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "{:?}", self)
-    }
-}
-impl Debug for Ve {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
             Ve::V(v) => write!(f, "{}", v),

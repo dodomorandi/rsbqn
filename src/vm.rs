@@ -1,18 +1,19 @@
-
+#[cfg(feature = "debug-ops")]
+use crate::fmt::{dbg_stack_in, dbg_stack_out};
 use crate::gen::code::{f, r0, r1};
 
 use crate::provide::{decompose, fmtnum, glyph, prim_ind, provide, typ};
 use crate::schema::{
-    new_scalar, Ar, Block, BlockInst, Bodies, Calleable, Code, Env, Fn, Stack, Stacker, Tr2, Tr3, Ve, Vn, Vs, A, D1, D2, V,
+    new_scalar, Ar, Block, BlockInst, Bodies, Calleable, Code, Env, Fn, Stack, Stacker, Tr2, Tr3,
+    Ve, Vn, Vs, A, D1, D2, V,
 };
 use bacon_rajan_cc::Cc;
 
-
-
-use std::ptr;
 //use std::panic;
 use itertools::Itertools;
-use log::{info};
+#[cfg(feature = "debug-ops")]
+use log::debug;
+use log::info;
 use num_traits::FromPrimitive;
 
 pub fn call(stack: &mut Stack, arity: usize, a: Vn, x: Vn, w: Vn) -> Result<Vs, Ve> {
@@ -81,6 +82,7 @@ fn llst(ravel: Vec<V>) -> Vs {
     list(ravel, fill)
 }
 
+#[cfg(feature = "debug-ops")]
 fn incr(stack: &mut Stack) {
     stack.fp = stack.s.len();
 }
@@ -101,19 +103,18 @@ pub fn vm(
         // we are making the following assumptions:
         //  1. the BQN compiler is producing correct output
         //  2. the BQN virtual machine is compatible with the loaded compiler
-        // using an unsafe function because this loop is performance critical
-        match unsafe { code.bc.get_unchecked(pos) } {
+        match code.bc.get(pos).unwrap() {
             0 => {
                 // PUSH
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("PUSH");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
                 let r = code.objs[x].clone();
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("PUSH", pos - 2, format!("{} {}", &x, &r), stack);
-                stack.s.push_unchecked(Vs::V(r));
+                stack.s.push(Vs::V(r));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("PUSH", pos - 2, stack);
                 #[cfg(feature = "coz-ops")]
@@ -124,7 +125,7 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("DFND");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("DFND", pos - 2, format!("{}", &x), stack);
@@ -132,7 +133,7 @@ pub fn vm(
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("DFND", pos - 2, stack);
                 #[cfg(feature = "coz-ops")]
@@ -145,7 +146,7 @@ pub fn vm(
                 coz::begin!("POPS");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("POPS", pos - 1, "".to_string(), stack);
-                let _ = stack.s.pop_unchecked();
+                let _ = stack.s.pop().unwrap();
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("POPS", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -153,26 +154,29 @@ pub fn vm(
             }
             7 => {
                 // RETN
-                pos += 1;
+                #[cfg(feature = "debug-ops")]
+                {
+                    pos += 1;
+                }
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("RETN");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("RETN", pos - 1, "".to_string(), stack);
                 #[cfg(feature = "coz-ops")]
                 coz::end!("RETN");
-                break Ok(stack.s.pop_unchecked());
+                break Ok(stack.s.pop().unwrap());
             }
             11 => {
                 // ARRO
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("ARRO");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("ARRO", pos - 2, format!("{}", &x), stack);
-                let v = stack.s.pop_list_unchecked(x);
-                stack.s.push_unchecked(llst(v));
+                let v = stack.s.pop_list(x);
+                stack.s.push(llst(v));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("ARRO", pos - 2, stack);
                 #[cfg(feature = "coz-ops")]
@@ -183,12 +187,12 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("ARRM");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("ARRM", pos - 2, format!("{}", &x), stack);
-                let v = stack.s.pop_ref_list_unchecked(x);
-                stack.s.push_unchecked(Vs::Ar(Ar::new(v)));
+                let v = stack.s.pop_ref_list(x);
+                stack.s.push(Vs::Ar(Ar::new(v)));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("ARRM", pos - 2, stack);
                 #[cfg(feature = "coz-ops")]
@@ -201,10 +205,8 @@ pub fn vm(
                 coz::begin!("FN1C");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("FN1C", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let f = stack.s.pop().unwrap();
+                let x = stack.s.pop().unwrap();
                 let r = match call(
                     stack,
                     1,
@@ -215,7 +217,7 @@ pub fn vm(
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("FN1C", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -228,10 +230,8 @@ pub fn vm(
                 coz::begin!("FN1O");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("FN1O", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let f = stack.s.pop().unwrap();
+                let x = stack.s.pop().unwrap();
                 let r = match &x.as_v().unwrap() {
                     V::Nothing => x,
                     _ => match call(
@@ -245,7 +245,7 @@ pub fn vm(
                         Err(e) => break Err(e),
                     },
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("FN1O", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -258,11 +258,9 @@ pub fn vm(
                 coz::begin!("FN2C");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("FN2C", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let w = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let w = stack.s.pop().unwrap();
+                let f = stack.s.pop().unwrap();
+                let x = stack.s.pop().unwrap();
                 let r = match call(
                     stack,
                     2,
@@ -273,7 +271,7 @@ pub fn vm(
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("FN2C", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -286,11 +284,9 @@ pub fn vm(
                 coz::begin!("FN2O");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("FN2O", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let w = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let w = stack.s.pop().unwrap();
+                let f = stack.s.pop().unwrap();
+                let x = stack.s.pop().unwrap();
                 let r = match (&x.as_v().unwrap(), &w.as_v().unwrap()) {
                     (V::Nothing, _) => x,
                     (_, V::Nothing) => match call(
@@ -314,7 +310,7 @@ pub fn vm(
                         Err(e) => break Err(e),
                     },
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("FN2O", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -325,14 +321,12 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("TR2D");
-                let l = stack.s.len();
-                let g = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let h = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let g = stack.s.pop().unwrap();
+                let h = stack.s.pop().unwrap();
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("TR2D", pos - 1, format!("{} {}", &g, &h), stack);
                 let t = Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None));
-                stack.s.push_unchecked(t);
+                stack.s.push(t);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("TR2D", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -345,13 +339,11 @@ pub fn vm(
                 coz::begin!("TR3D");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("TR3D", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let g = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let h = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let f = stack.s.pop().unwrap();
+                let g = stack.s.pop().unwrap();
+                let h = stack.s.pop().unwrap();
                 let t = Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None));
-                stack.s.push_unchecked(t);
+                stack.s.push(t);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("TR3D", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -364,16 +356,14 @@ pub fn vm(
                 coz::begin!("TR3O");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("TR3O", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let g = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let h = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let f = stack.s.pop().unwrap();
+                let g = stack.s.pop().unwrap();
+                let h = stack.s.pop().unwrap();
                 let t = match &f.as_v().unwrap() {
                     V::Nothing => Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None)),
                     _ => Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None)),
                 };
-                stack.s.push_unchecked(t);
+                stack.s.push(t);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("TR3O", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -386,15 +376,13 @@ pub fn vm(
                 coz::begin!("MD1C");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("MD1C", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let m = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let f = stack.s.pop().unwrap();
+                let m = stack.s.pop().unwrap();
                 let r = match call1(stack, m.into_v().unwrap(), f.into_v().unwrap()) {
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("MD1C", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -407,11 +395,9 @@ pub fn vm(
                 coz::begin!("MD2C");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("MD2C", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let m = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let g = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let f = stack.s.pop().unwrap();
+                let m = stack.s.pop().unwrap();
+                let g = stack.s.pop().unwrap();
                 let r = match call2(
                     stack,
                     m.into_v().unwrap(),
@@ -421,7 +407,7 @@ pub fn vm(
                     Ok(r) => r,
                     Err(e) => break Err(e),
                 };
-                stack.s.push_unchecked(r);
+                stack.s.push(r);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("MD2C", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -432,14 +418,14 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("VARO");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
-                let w = unsafe { *code.bc.get_unchecked(pos) };
+                let w = *code.bc.get(pos).unwrap();
                 pos += 1;
                 let t = env.ge(x);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("VARO", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push_unchecked(Vs::V(t.get(w)));
+                stack.s.push(Vs::V(t.get(w)));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("VARO", pos - 3, stack);
                 #[cfg(feature = "coz-ops")]
@@ -450,14 +436,14 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("VARU");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
-                let w = unsafe { *code.bc.get_unchecked(pos) };
+                let w = *code.bc.get(pos).unwrap();
                 pos += 1;
                 let t = env.ge(x);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("VARU", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push_unchecked(Vs::V(t.get_drop(w)));
+                stack.s.push(Vs::V(t.get_drop(w)));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("VARU", pos - 3, stack);
                 #[cfg(feature = "coz-ops")]
@@ -468,14 +454,14 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("VARM");
-                let x = unsafe { *code.bc.get_unchecked(pos) };
+                let x = *code.bc.get(pos).unwrap();
                 pos += 1;
-                let w = unsafe { *code.bc.get_unchecked(pos) };
+                let w = *code.bc.get(pos).unwrap();
                 pos += 1;
                 let t = env.ge(x);
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("VARM", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push_unchecked(Vs::Slot(t.clone(), w));
+                stack.s.push(Vs::Slot(t.clone(), w));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("VARM", pos - 3, stack);
                 #[cfg(feature = "coz-ops")]
@@ -488,16 +474,15 @@ pub fn vm(
                 coz::begin!("PRED");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("PRED", pos - 1, "".to_string(), stack);
-                let pred = stack.s.pop_unchecked();
-                match &pred {
-                    Vs::V(v) => match &v {
+                let pred = stack.s.pop().unwrap();
+                if let Vs::V(v) = &pred {
+                    match &v {
                         V::Scalar(n) if *n == 1.0 => (),
                         V::Scalar(n) if *n == 0.0 => {
                             // move to next body in list
                             match (bodies, body_id) {
                                 (Some(b), Some(id)) => {
-                                    let (p, locals) =
-                                        unsafe { code.body_ids.get_unchecked(b[id + 1]) };
+                                    let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
                                     break vm(
                                         &env.reinit(*locals),
                                         code,
@@ -511,8 +496,7 @@ pub fn vm(
                             };
                         }
                         _ => panic!("PRED not 0 or 1"),
-                    },
-                    _ => (),
+                    }
                 }
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("PRED", pos - 1, stack);
@@ -524,10 +508,10 @@ pub fn vm(
                 pos += 1;
                 #[cfg(feature = "coz-ops")]
                 coz::begin!("VFYM");
-                let m = stack.s.pop_unchecked();
+                let m = stack.s.pop().unwrap();
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("VFYM", pos - 1, "".to_string(), stack);
-                stack.s.push_unchecked(Vs::Match(Some(m.into_v().unwrap())));
+                stack.s.push(Vs::Match(Some(m.into_v().unwrap())));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("VFYM", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -540,7 +524,7 @@ pub fn vm(
                 coz::begin!("NOTM");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("NOTM", pos - 1, "".to_string(), stack);
-                stack.s.push_unchecked(Vs::Match(None));
+                stack.s.push(Vs::Match(None));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("NOTM", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -553,17 +537,15 @@ pub fn vm(
                 coz::begin!("SETH");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("SETH", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let i = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let v = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let i = stack.s.pop().unwrap();
+                let v = stack.s.pop().unwrap();
                 match i.set(true, v.as_v().unwrap()) {
                     Ok(_r) => (), // continue
                     Err(_) => {
                         // move to next body in list
                         match (bodies, body_id) {
                             (Some(b), Some(id)) => {
-                                let (p, locals) = unsafe { code.body_ids.get_unchecked(b[id + 1]) };
+                                let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
                                 break vm(
                                     &env.reinit(*locals),
                                     code,
@@ -589,12 +571,10 @@ pub fn vm(
                 coz::begin!("SETN");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("SETN", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let i = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let v = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let i = stack.s.pop().unwrap();
+                let v = stack.s.pop().unwrap();
                 let r = i.set(true, v.as_v().unwrap())?;
-                stack.s.push_unchecked(Vs::V(r));
+                stack.s.push(Vs::V(r));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("SETN", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -607,12 +587,10 @@ pub fn vm(
                 coz::begin!("SETU");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("SETU", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let i = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let v = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let i = stack.s.pop().unwrap();
+                let v = stack.s.pop().unwrap();
                 let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push_unchecked(Vs::V(r));
+                stack.s.push(Vs::V(r));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("SETU", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -625,11 +603,9 @@ pub fn vm(
                 coz::begin!("SETM");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("SETM", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let i = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                let x = unsafe { ptr::read(stack.s.as_ptr().add(l - 3)) };
-                unsafe { stack.s.set_len(l - 3) };
+                let i = stack.s.pop().unwrap();
+                let f = stack.s.pop().unwrap();
+                let x = stack.s.pop().unwrap();
                 let v = match call(
                     stack,
                     2,
@@ -641,7 +617,7 @@ pub fn vm(
                     Err(e) => break Err(e),
                 };
                 let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push_unchecked(Vs::V(r));
+                stack.s.push(Vs::V(r));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("SETM", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -654,10 +630,8 @@ pub fn vm(
                 coz::begin!("SETC");
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_in("SETC", pos - 1, "".to_string(), stack);
-                let l = stack.s.len();
-                let i = unsafe { ptr::read(stack.s.as_ptr().add(l - 1)) };
-                let f = unsafe { ptr::read(stack.s.as_ptr().add(l - 2)) };
-                unsafe { stack.s.set_len(l - 2) };
+                let i = stack.s.pop().unwrap();
+                let f = stack.s.pop().unwrap();
                 let v = match call(
                     stack,
                     1,
@@ -669,7 +643,7 @@ pub fn vm(
                     Err(e) => break Err(e),
                 };
                 let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push_unchecked(Vs::V(r));
+                stack.s.push(Vs::V(r));
                 #[cfg(feature = "debug-ops")]
                 dbg_stack_out("SETC", pos - 1, stack);
                 #[cfg(feature = "coz-ops")]
@@ -739,6 +713,7 @@ pub fn sysfns(_arity: usize, _x: Vn, _w: Vn) -> Result<Vs, Ve> {
     Ok(Vs::V(V::A(Cc::new(A::new(vec![], vec![0], None)))))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prog(
     stack: &mut Stack,
     compiler: &V,
