@@ -1,7 +1,7 @@
-#[cfg(feature = "debug-ops")]
 use crate::fmt::{dbg_stack_in, dbg_stack_out};
 use crate::gen::code::{f, r0, r1};
 
+use crate::coz_scope;
 use crate::provide::{decompose, fmtnum, glyph, prim_ind, provide, typ};
 use crate::schema::{
     new_scalar, Ar, Block, BlockInst, Bodies, Calleable, Code, Env, Fn, Stack, Stacker, Tr2, Tr3,
@@ -82,9 +82,12 @@ fn llst(ravel: Vec<V>) -> Vs {
     list(ravel, fill)
 }
 
-#[cfg(feature = "debug-ops")]
-fn incr(stack: &mut Stack) {
-    stack.fp = stack.s.len();
+#[inline]
+fn incr(_stack: &mut Stack) {
+    #[cfg(feature = "debug-ops")]
+    {
+        _stack.fp = _stack.s.len();
+    }
 }
 
 pub fn vm(
@@ -95,7 +98,6 @@ pub fn vm(
     mut pos: usize,
     stack: &mut Stack,
 ) -> Result<Vs, Ve> {
-    #[cfg(feature = "debug-ops")]
     incr(stack);
     #[cfg(feature = "debug-ops")]
     debug!("new eval");
@@ -107,199 +109,127 @@ pub fn vm(
             0 => {
                 // PUSH
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("PUSH");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let r = code.objs[x].clone();
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("PUSH", pos - 2, format!("{} {}", &x, &r), stack);
-                stack.s.push(Vs::V(r));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("PUSH", pos - 2, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("PUSH");
+                coz_scope!("PUSH", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let r = code.objs[x].clone();
+                    dbg_stack_in("PUSH", pos - 2, format!("{} {}", &x, &r), stack);
+                    stack.s.push(Vs::V(r));
+                    dbg_stack_out("PUSH", pos - 2, stack);
+                });
             }
             1 => {
                 // DFND
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("DFND");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("DFND", pos - 2, format!("{}", &x), stack);
-                let r = match derv(env, code, &code.blocks[x], stack) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("DFND", pos - 2, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("DFND");
+                coz_scope!("DFND", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    dbg_stack_in("DFND", pos - 2, format!("{}", &x), stack);
+                    let r = match derv(env, code, &code.blocks[x], stack) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("DFND", pos - 2, stack);
+                });
             }
             6 => {
                 // POPS
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("POPS");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("POPS", pos - 1, "".to_string(), stack);
-                let _ = stack.s.pop().unwrap();
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("POPS", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("POPS");
+                coz_scope!("POPS", {
+                    dbg_stack_in("POPS", pos - 1, "".to_string(), stack);
+                    let _ = stack.s.pop().unwrap();
+                    dbg_stack_out("POPS", pos - 1, stack);
+                });
             }
             7 => {
                 // RETN
-                #[cfg(feature = "debug-ops")]
                 {
                     pos += 1;
                 }
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("RETN");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("RETN", pos - 1, "".to_string(), stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("RETN");
+                coz_scope!("RETN", {
+                    dbg_stack_in("RETN", pos - 1, "".to_string(), stack);
+                });
                 break Ok(stack.s.pop().unwrap());
             }
             11 => {
                 // ARRO
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("ARRO");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("ARRO", pos - 2, format!("{}", &x), stack);
-                let v = stack.s.pop_list(x);
-                stack.s.push(llst(v));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("ARRO", pos - 2, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("ARRO");
+                coz_scope!("ARRO", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    dbg_stack_in("ARRO", pos - 2, format!("{}", &x), stack);
+                    let v = stack.s.pop_list(x);
+                    stack.s.push(llst(v));
+                    dbg_stack_out("ARRO", pos - 2, stack);
+                });
             }
             12 => {
                 // ARRM
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("ARRM");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("ARRM", pos - 2, format!("{}", &x), stack);
-                let v = stack.s.pop_ref_list(x);
-                stack.s.push(Vs::Ar(Ar::new(v)));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("ARRM", pos - 2, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("ARRM");
+                coz_scope!("ARRM", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    dbg_stack_in("ARRM", pos - 2, format!("{}", &x), stack);
+                    let v = stack.s.pop_ref_list(x);
+                    stack.s.push(Vs::Ar(Ar::new(v)));
+                    dbg_stack_out("ARRM", pos - 2, stack);
+                });
             }
             16 => {
                 // FN1C
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("FN1C");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("FN1C", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let x = stack.s.pop().unwrap();
-                let r = match call(
-                    stack,
-                    1,
-                    Vn(Some(&f.into_v().unwrap())),
-                    Vn(Some(&x.into_v().unwrap())),
-                    Vn(None),
-                ) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("FN1C", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("FN1C");
+                coz_scope!("FN1C", {
+                    dbg_stack_in("FN1C", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let x = stack.s.pop().unwrap();
+                    let r = match call(
+                        stack,
+                        1,
+                        Vn(Some(&f.into_v().unwrap())),
+                        Vn(Some(&x.into_v().unwrap())),
+                        Vn(None),
+                    ) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("FN1C", pos - 1, stack);
+                });
             }
             18 => {
                 // FN1O
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("FN1O");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("FN1O", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let x = stack.s.pop().unwrap();
-                let r = match &x.as_v().unwrap() {
-                    V::Nothing => x,
-                    _ => match call(
-                        stack,
-                        1,
-                        Vn(Some(&f.into_v().unwrap())),
-                        Vn(Some(&x.into_v().unwrap())),
-                        Vn(None),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    },
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("FN1O", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("FN1O");
+                coz_scope!("FN1O", {
+                    dbg_stack_in("FN1O", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let x = stack.s.pop().unwrap();
+                    let r = match &x.as_v().unwrap() {
+                        V::Nothing => x,
+                        _ => match call(
+                            stack,
+                            1,
+                            Vn(Some(&f.into_v().unwrap())),
+                            Vn(Some(&x.into_v().unwrap())),
+                            Vn(None),
+                        ) {
+                            Ok(r) => r,
+                            Err(e) => break Err(e),
+                        },
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("FN1O", pos - 1, stack);
+                });
             }
             17 => {
                 // FN2C
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("FN2C");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("FN2C", pos - 1, "".to_string(), stack);
-                let w = stack.s.pop().unwrap();
-                let f = stack.s.pop().unwrap();
-                let x = stack.s.pop().unwrap();
-                let r = match call(
-                    stack,
-                    2,
-                    Vn(Some(&f.into_v().unwrap())),
-                    Vn(Some(&x.into_v().unwrap())),
-                    Vn(Some(&w.into_v().unwrap())),
-                ) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("FN2C", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("FN2C");
-            }
-            19 => {
-                // FN2O
-                pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("FN2O");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("FN2O", pos - 1, "".to_string(), stack);
-                let w = stack.s.pop().unwrap();
-                let f = stack.s.pop().unwrap();
-                let x = stack.s.pop().unwrap();
-                let r = match (&x.as_v().unwrap(), &w.as_v().unwrap()) {
-                    (V::Nothing, _) => x,
-                    (_, V::Nothing) => match call(
-                        stack,
-                        1,
-                        Vn(Some(&f.into_v().unwrap())),
-                        Vn(Some(&x.into_v().unwrap())),
-                        Vn(None),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    },
-                    _ => match call(
+                coz_scope!("FN2C", {
+                    dbg_stack_in("FN2C", pos - 1, "".to_string(), stack);
+                    let w = stack.s.pop().unwrap();
+                    let f = stack.s.pop().unwrap();
+                    let x = stack.s.pop().unwrap();
+                    let r = match call(
                         stack,
                         2,
                         Vn(Some(&f.into_v().unwrap())),
@@ -308,177 +238,226 @@ pub fn vm(
                     ) {
                         Ok(r) => r,
                         Err(e) => break Err(e),
-                    },
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("FN2O", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("FN2O");
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("FN2C", pos - 1, stack);
+                });
+            }
+            19 => {
+                // FN2O
+                pos += 1;
+                coz_scope!("FN2O", {
+                    dbg_stack_in("FN2O", pos - 1, "".to_string(), stack);
+                    let w = stack.s.pop().unwrap();
+                    let f = stack.s.pop().unwrap();
+                    let x = stack.s.pop().unwrap();
+                    let r = match (&x.as_v().unwrap(), &w.as_v().unwrap()) {
+                        (V::Nothing, _) => x,
+                        (_, V::Nothing) => match call(
+                            stack,
+                            1,
+                            Vn(Some(&f.into_v().unwrap())),
+                            Vn(Some(&x.into_v().unwrap())),
+                            Vn(None),
+                        ) {
+                            Ok(r) => r,
+                            Err(e) => break Err(e),
+                        },
+                        _ => match call(
+                            stack,
+                            2,
+                            Vn(Some(&f.into_v().unwrap())),
+                            Vn(Some(&x.into_v().unwrap())),
+                            Vn(Some(&w.into_v().unwrap())),
+                        ) {
+                            Ok(r) => r,
+                            Err(e) => break Err(e),
+                        },
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("FN2O", pos - 1, stack);
+                });
             }
             20 => {
                 // TR2D
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("TR2D");
-                let g = stack.s.pop().unwrap();
-                let h = stack.s.pop().unwrap();
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("TR2D", pos - 1, format!("{} {}", &g, &h), stack);
-                let t = Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None));
-                stack.s.push(t);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("TR2D", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("TR2D");
+                coz_scope!("TR2D", {
+                    let g = stack.s.pop().unwrap();
+                    let h = stack.s.pop().unwrap();
+                    dbg_stack_in("TR2D", pos - 1, format!("{} {}", &g, &h), stack);
+                    let t = Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None));
+                    stack.s.push(t);
+                    dbg_stack_out("TR2D", pos - 1, stack);
+                });
             }
             21 => {
                 // TR3D
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("TR3D");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("TR3D", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let g = stack.s.pop().unwrap();
-                let h = stack.s.pop().unwrap();
-                let t = Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None));
-                stack.s.push(t);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("TR3D", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("TR3D");
+                coz_scope!("TR3D", {
+                    dbg_stack_in("TR3D", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let g = stack.s.pop().unwrap();
+                    let h = stack.s.pop().unwrap();
+                    let t = Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None));
+                    stack.s.push(t);
+                    dbg_stack_out("TR3D", pos - 1, stack);
+                });
             }
             23 => {
                 // TR3O
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("TR3O");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("TR3O", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let g = stack.s.pop().unwrap();
-                let h = stack.s.pop().unwrap();
-                let t = match &f.as_v().unwrap() {
-                    V::Nothing => Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None)),
-                    _ => Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None)),
-                };
-                stack.s.push(t);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("TR3O", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("TR3O");
+                coz_scope!("TR3O", {
+                    dbg_stack_in("TR3O", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let g = stack.s.pop().unwrap();
+                    let h = stack.s.pop().unwrap();
+                    let t = match &f.as_v().unwrap() {
+                        V::Nothing => Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None)),
+                        _ => Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None)),
+                    };
+                    stack.s.push(t);
+                    dbg_stack_out("TR3O", pos - 1, stack);
+                });
             }
             26 => {
                 // MD1C
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("MD1C");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("MD1C", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let m = stack.s.pop().unwrap();
-                let r = match call1(stack, m.into_v().unwrap(), f.into_v().unwrap()) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("MD1C", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("MD1C");
+                coz_scope!("MD1C", {
+                    dbg_stack_in("MD1C", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let m = stack.s.pop().unwrap();
+                    let r = match call1(stack, m.into_v().unwrap(), f.into_v().unwrap()) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("MD1C", pos - 1, stack);
+                });
             }
             27 => {
                 // MD2C
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("MD2C");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("MD2C", pos - 1, "".to_string(), stack);
-                let f = stack.s.pop().unwrap();
-                let m = stack.s.pop().unwrap();
-                let g = stack.s.pop().unwrap();
-                let r = match call2(
-                    stack,
-                    m.into_v().unwrap(),
-                    f.into_v().unwrap(),
-                    g.into_v().unwrap(),
-                ) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                stack.s.push(r);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("MD2C", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("MD2C");
+                coz_scope!("MD2C", {
+                    dbg_stack_in("MD2C", pos - 1, "".to_string(), stack);
+                    let f = stack.s.pop().unwrap();
+                    let m = stack.s.pop().unwrap();
+                    let g = stack.s.pop().unwrap();
+                    let r = match call2(
+                        stack,
+                        m.into_v().unwrap(),
+                        f.into_v().unwrap(),
+                        g.into_v().unwrap(),
+                    ) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    stack.s.push(r);
+                    dbg_stack_out("MD2C", pos - 1, stack);
+                });
             }
             32 => {
                 // VARO
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("VARO");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let w = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let t = env.ge(x);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("VARO", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push(Vs::V(t.get(w)));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("VARO", pos - 3, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("VARO");
+                coz_scope!("VARO", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let w = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let t = env.ge(x);
+                    dbg_stack_in("VARO", pos - 3, format!("{} {}", &x, &w), stack);
+                    stack.s.push(Vs::V(t.get(w)));
+                    dbg_stack_out("VARO", pos - 3, stack);
+                });
             }
             34 => {
                 // VARU
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("VARU");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let w = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let t = env.ge(x);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("VARU", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push(Vs::V(t.get_drop(w)));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("VARU", pos - 3, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("VARU");
+                coz_scope!("VARU", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let w = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let t = env.ge(x);
+                    dbg_stack_in("VARU", pos - 3, format!("{} {}", &x, &w), stack);
+                    stack.s.push(Vs::V(t.get_drop(w)));
+                    dbg_stack_out("VARU", pos - 3, stack);
+                });
             }
             33 => {
                 // VARM
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("VARM");
-                let x = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let w = *code.bc.get(pos).unwrap();
-                pos += 1;
-                let t = env.ge(x);
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("VARM", pos - 3, format!("{} {}", &x, &w), stack);
-                stack.s.push(Vs::Slot(t.clone(), w));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("VARM", pos - 3, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("VARM");
+                coz_scope!("VARM", {
+                    let x = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let w = *code.bc.get(pos).unwrap();
+                    pos += 1;
+                    let t = env.ge(x);
+                    dbg_stack_in("VARM", pos - 3, format!("{} {}", &x, &w), stack);
+                    stack.s.push(Vs::Slot(t.clone(), w));
+                    dbg_stack_out("VARM", pos - 3, stack);
+                });
             }
             42 => {
                 // PRED
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("PRED");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("PRED", pos - 1, "".to_string(), stack);
-                let pred = stack.s.pop().unwrap();
-                if let Vs::V(v) = &pred {
-                    match &v {
-                        V::Scalar(n) if *n == 1.0 => (),
-                        V::Scalar(n) if *n == 0.0 => {
+                coz_scope!("PRED", {
+                    dbg_stack_in("PRED", pos - 1, "".to_string(), stack);
+                    let pred = stack.s.pop().unwrap();
+                    if let Vs::V(v) = &pred {
+                        match &v {
+                            V::Scalar(n) if *n == 1.0 => (),
+                            V::Scalar(n) if *n == 0.0 => {
+                                // move to next body in list
+                                match (bodies, body_id) {
+                                    (Some(b), Some(id)) => {
+                                        let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
+                                        break vm(
+                                            &env.reinit(*locals),
+                                            code,
+                                            Some(b),
+                                            Some(id + 1),
+                                            *p,
+                                            stack,
+                                        );
+                                    }
+                                    _ => panic!("no successive body in PRED"),
+                                };
+                            }
+                            _ => panic!("PRED not 0 or 1"),
+                        }
+                    }
+                    dbg_stack_out("PRED", pos - 1, stack);
+                });
+            }
+            43 => {
+                // VFYM
+                pos += 1;
+                coz_scope!("VFYM", {
+                    let m = stack.s.pop().unwrap();
+                    dbg_stack_in("VFYM", pos - 1, "".to_string(), stack);
+                    stack.s.push(Vs::Match(Some(m.into_v().unwrap())));
+                    dbg_stack_out("VFYM", pos - 1, stack);
+                });
+            }
+            44 => {
+                // NOTM
+                pos += 1;
+                coz_scope!("NOTM", {
+                    dbg_stack_in("NOTM", pos - 1, "".to_string(), stack);
+                    stack.s.push(Vs::Match(None));
+                    dbg_stack_out("NOTM", pos - 1, stack);
+                });
+            }
+            47 => {
+                // SETH
+                pos += 1;
+                coz_scope!("SETH", {
+                    dbg_stack_in("SETH", pos - 1, "".to_string(), stack);
+                    let i = stack.s.pop().unwrap();
+                    let v = stack.s.pop().unwrap();
+                    match i.set(true, v.as_v().unwrap()) {
+                        Ok(_r) => (), // continue
+                        Err(_) => {
                             // move to next body in list
                             match (bodies, body_id) {
                                 (Some(b), Some(id)) => {
@@ -492,162 +471,81 @@ pub fn vm(
                                         stack,
                                     );
                                 }
-                                _ => panic!("no successive body in PRED"),
+                                _ => panic!("no successive body in SETH"),
                             };
                         }
-                        _ => panic!("PRED not 0 or 1"),
                     }
-                }
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("PRED", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("PRED");
-            }
-            43 => {
-                // VFYM
-                pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("VFYM");
-                let m = stack.s.pop().unwrap();
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("VFYM", pos - 1, "".to_string(), stack);
-                stack.s.push(Vs::Match(Some(m.into_v().unwrap())));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("VFYM", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("VFYM");
-            }
-            44 => {
-                // NOTM
-                pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("NOTM");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("NOTM", pos - 1, "".to_string(), stack);
-                stack.s.push(Vs::Match(None));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("NOTM", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("NOTM");
-            }
-            47 => {
-                // SETH
-                pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("SETH");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("SETH", pos - 1, "".to_string(), stack);
-                let i = stack.s.pop().unwrap();
-                let v = stack.s.pop().unwrap();
-                match i.set(true, v.as_v().unwrap()) {
-                    Ok(_r) => (), // continue
-                    Err(_) => {
-                        // move to next body in list
-                        match (bodies, body_id) {
-                            (Some(b), Some(id)) => {
-                                let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
-                                break vm(
-                                    &env.reinit(*locals),
-                                    code,
-                                    Some(b),
-                                    Some(id + 1),
-                                    *p,
-                                    stack,
-                                );
-                            }
-                            _ => panic!("no successive body in SETH"),
-                        };
-                    }
-                }
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("SETH", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("SETH");
+                    dbg_stack_out("SETH", pos - 1, stack);
+                });
             }
             48 => {
                 // SETN
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("SETN");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("SETN", pos - 1, "".to_string(), stack);
-                let i = stack.s.pop().unwrap();
-                let v = stack.s.pop().unwrap();
-                let r = i.set(true, v.as_v().unwrap())?;
-                stack.s.push(Vs::V(r));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("SETN", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("SETN");
+                coz_scope!("SETN", {
+                    dbg_stack_in("SETN", pos - 1, "".to_string(), stack);
+                    let i = stack.s.pop().unwrap();
+                    let v = stack.s.pop().unwrap();
+                    let r = i.set(true, v.as_v().unwrap())?;
+                    stack.s.push(Vs::V(r));
+                    dbg_stack_out("SETN", pos - 1, stack);
+                });
             }
             49 => {
                 // SETU
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("SETU");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("SETU", pos - 1, "".to_string(), stack);
-                let i = stack.s.pop().unwrap();
-                let v = stack.s.pop().unwrap();
-                let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push(Vs::V(r));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("SETU", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("SETU");
+                coz_scope!("SETU", {
+                    dbg_stack_in("SETU", pos - 1, "".to_string(), stack);
+                    let i = stack.s.pop().unwrap();
+                    let v = stack.s.pop().unwrap();
+                    let r = i.set(false, v.as_v().unwrap())?;
+                    stack.s.push(Vs::V(r));
+                    dbg_stack_out("SETU", pos - 1, stack);
+                });
             }
             50 => {
                 // SETM
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("SETM");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("SETM", pos - 1, "".to_string(), stack);
-                let i = stack.s.pop().unwrap();
-                let f = stack.s.pop().unwrap();
-                let x = stack.s.pop().unwrap();
-                let v = match call(
-                    stack,
-                    2,
-                    Vn(Some(&f.into_v().unwrap())),
-                    Vn(Some(&x.into_v().unwrap())),
-                    Vn(Some(&i.get())),
-                ) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push(Vs::V(r));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("SETM", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("SETM");
+                coz_scope!("SETM", {
+                    dbg_stack_in("SETM", pos - 1, "".to_string(), stack);
+                    let i = stack.s.pop().unwrap();
+                    let f = stack.s.pop().unwrap();
+                    let x = stack.s.pop().unwrap();
+                    let v = match call(
+                        stack,
+                        2,
+                        Vn(Some(&f.into_v().unwrap())),
+                        Vn(Some(&x.into_v().unwrap())),
+                        Vn(Some(&i.get())),
+                    ) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    let r = i.set(false, v.as_v().unwrap())?;
+                    stack.s.push(Vs::V(r));
+                    dbg_stack_out("SETM", pos - 1, stack);
+                });
             }
             51 => {
                 // SETC
                 pos += 1;
-                #[cfg(feature = "coz-ops")]
-                coz::begin!("SETC");
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_in("SETC", pos - 1, "".to_string(), stack);
-                let i = stack.s.pop().unwrap();
-                let f = stack.s.pop().unwrap();
-                let v = match call(
-                    stack,
-                    1,
-                    Vn(Some(&f.into_v().unwrap())),
-                    Vn(Some(&i.get())),
-                    Vn(None),
-                ) {
-                    Ok(r) => r,
-                    Err(e) => break Err(e),
-                };
-                let r = i.set(false, v.as_v().unwrap())?;
-                stack.s.push(Vs::V(r));
-                #[cfg(feature = "debug-ops")]
-                dbg_stack_out("SETC", pos - 1, stack);
-                #[cfg(feature = "coz-ops")]
-                coz::end!("SETC");
+                coz_scope!("SETC", {
+                    dbg_stack_in("SETC", pos - 1, "".to_string(), stack);
+                    let i = stack.s.pop().unwrap();
+                    let f = stack.s.pop().unwrap();
+                    let v = match call(
+                        stack,
+                        1,
+                        Vn(Some(&f.into_v().unwrap())),
+                        Vn(Some(&i.get())),
+                        Vn(None),
+                    ) {
+                        Ok(r) => r,
+                        Err(e) => break Err(e),
+                    };
+                    let r = i.set(false, v.as_v().unwrap())?;
+                    stack.s.push(Vs::V(r));
+                    dbg_stack_out("SETC", pos - 1, stack);
+                });
             }
             _ => {
                 panic!("unreachable op: {}", code.bc[pos]);

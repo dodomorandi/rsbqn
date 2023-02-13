@@ -1,5 +1,4 @@
 use crate::schema::{Stack, Ve, Vs, A, V};
-use log::debug;
 use std::fmt::{Display, Formatter, Result};
 
 pub fn fmt_stack(stack: &mut Stack) -> String {
@@ -31,19 +30,24 @@ pub fn fmt_result(a: &A) -> String {
     }
     acc
 }
-pub fn dbg_stack_in(op: &str, pos: usize, args: String, stack: &mut Stack) {
-    debug!(
+
+#[inline]
+pub fn dbg_stack_in(_op: &str, _pos: usize, _args: impl Display, _stack: &mut Stack) {
+    #[cfg(feature = "debug-ops")]
+    ::log::debug!(
         "{:<22}  in: {}",
-        format!("{:<16} @{}", format!("{} {}", op, args), pos),
-        fmt_stack(stack)
+        format_args!("{:<16} @{}", format!("{} {}", _op, _args), _pos),
+        fmt_stack(_stack)
     );
 }
 
-pub fn dbg_stack_out(op: &str, pos: usize, stack: &mut Stack) {
-    debug!(
+#[inline]
+pub fn dbg_stack_out(_op: &str, _pos: usize, _stack: &mut Stack) {
+    #[cfg(feature = "debug-ops")]
+    ::log::debug!(
         "{:<22} out: {}",
-        format!("{:<16} @{}", format!("{}", op), pos),
-        fmt_stack(stack)
+        format_args!("{:<16} @{}", format!("{}", _op), _pos),
+        fmt_stack(_stack)
     );
 }
 
