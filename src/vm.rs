@@ -4,8 +4,8 @@ use crate::gen::code::{f, r0, r1};
 use crate::coz_scope;
 use crate::provide::{decompose, fmtnum, glyph, prim_ind, provide, typ};
 use crate::schema::{
-    new_scalar, Ar, Block, BlockInst, Bodies, Calleable, Code, Env, Fn, Stack, Stacker, Tr2, Tr3,
-    Ve, Vn, Vs, A, D1, D2, V,
+    new_scalar, Ar, Block, BlockInst, Bodies, Bytecode, Calleable, Code, Env, Fn, Stack, Stacker,
+    Tr2, Tr3, Ve, Vn, Vs, A, D1, D2, V,
 };
 use bacon_rajan_cc::Cc;
 
@@ -95,219 +95,181 @@ pub fn vm(
     code: &Cc<Code>,
     bodies: Option<&Vec<usize>>,
     body_id: Option<usize>,
-    mut pos: usize,
+    pos: usize,
     stack: &mut Stack,
 ) -> Result<Vs, Ve> {
     incr(stack);
     #[cfg(feature = "debug-ops")]
     debug!("new eval");
+    let mut bytecodes_iter = code.get_bc(pos..).bytecodes();
     loop {
-        // we are making the following assumptions:
-        //  1. the BQN compiler is producing correct output
-        //  2. the BQN virtual machine is compatible with the loaded compiler
-        match code.bc.get(pos).unwrap() {
-            0 => {
+        let (pos, bytecode) = bytecodes_iter
+            .next()
+            .expect("unexpected end of bytecodes")
+            .expect("cannot parse bytecode");
+
+        match bytecode {
+            Bytecode::Push(x, r) => {
                 // PUSH
-                pos += 1;
                 coz_scope!("PUSH", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    let r = code.objs[x].clone();
-                    dbg_stack_in("PUSH", pos - 2, format!("{} {}", &x, &r), stack);
-                    stack.s.push(Vs::V(r));
-                    dbg_stack_out("PUSH", pos - 2, stack);
+                    dbg_stack_in("PUSH", pos, format!("{} {}", &x, &r), stack);
+                    stack.s.push(Vs::V(r.clone()));
+                    dbg_stack_out("PUSH", pos, stack);
                 });
             }
-            1 => {
+            Bytecode::Dfnd(x, block) => {
                 // DFND
-                pos += 1;
                 coz_scope!("DFND", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    dbg_stack_in("DFND", pos - 2, format!("{}", &x), stack);
-                    let r = match derv(env, code, &code.blocks[x], stack) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    dbg_stack_in("DFND", pos, format!("{}", &x), stack);
+                    let r = derv(env, code, block, stack)?;
                     stack.s.push(r);
-                    dbg_stack_out("DFND", pos - 2, stack);
+                    dbg_stack_out("DFND", pos, stack);
                 });
             }
-            6 => {
+            Bytecode::Pops => {
                 // POPS
-                pos += 1;
                 coz_scope!("POPS", {
-                    dbg_stack_in("POPS", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("POPS", pos, "".to_string(), stack);
                     let _ = stack.s.pop().unwrap();
-                    dbg_stack_out("POPS", pos - 1, stack);
+                    dbg_stack_out("POPS", pos, stack);
                 });
             }
-            7 => {
+            Bytecode::Retn => {
                 // RETN
-                {
-                    pos += 1;
-                }
+                {}
                 coz_scope!("RETN", {
-                    dbg_stack_in("RETN", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("RETN", pos, "".to_string(), stack);
                 });
-                break Ok(stack.s.pop().unwrap());
+                return Ok(stack.s.pop().unwrap());
             }
-            11 => {
-                // ARRO
-                pos += 1;
-                coz_scope!("ARRO", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    dbg_stack_in("ARRO", pos - 2, format!("{}", &x), stack);
+            Bytecode::Lsto(x) => {
+                // LSTO
+                coz_scope!("LSTO", {
+                    dbg_stack_in("LSTO", pos, format!("{}", &x), stack);
                     let v = stack.s.pop_list(x);
                     stack.s.push(llst(v));
-                    dbg_stack_out("ARRO", pos - 2, stack);
+                    dbg_stack_out("LSTO", pos, stack);
                 });
             }
-            12 => {
-                // ARRM
-                pos += 1;
-                coz_scope!("ARRM", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    dbg_stack_in("ARRM", pos - 2, format!("{}", &x), stack);
+            Bytecode::Lstm(x) => {
+                // LSTM
+                coz_scope!("LSTM", {
+                    dbg_stack_in("LSTM", pos, format!("{}", &x), stack);
                     let v = stack.s.pop_ref_list(x);
                     stack.s.push(Vs::Ar(Ar::new(v)));
-                    dbg_stack_out("ARRM", pos - 2, stack);
+                    dbg_stack_out("LSTM", pos, stack);
                 });
             }
-            16 => {
+            Bytecode::Fn1c => {
                 // FN1C
-                pos += 1;
                 coz_scope!("FN1C", {
-                    dbg_stack_in("FN1C", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("FN1C", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
-                    let r = match call(
+                    let r = call(
                         stack,
                         1,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
                         Vn(None),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    )?;
                     stack.s.push(r);
-                    dbg_stack_out("FN1C", pos - 1, stack);
+                    dbg_stack_out("FN1C", pos, stack);
                 });
             }
-            18 => {
+            Bytecode::Fn1o => {
                 // FN1O
-                pos += 1;
                 coz_scope!("FN1O", {
-                    dbg_stack_in("FN1O", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("FN1O", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
                     let r = match &x.as_v().unwrap() {
                         V::Nothing => x,
-                        _ => match call(
+                        _ => call(
                             stack,
                             1,
                             Vn(Some(&f.into_v().unwrap())),
                             Vn(Some(&x.into_v().unwrap())),
                             Vn(None),
-                        ) {
-                            Ok(r) => r,
-                            Err(e) => break Err(e),
-                        },
+                        )?,
                     };
                     stack.s.push(r);
-                    dbg_stack_out("FN1O", pos - 1, stack);
+                    dbg_stack_out("FN1O", pos, stack);
                 });
             }
-            17 => {
+            Bytecode::Fn2c => {
                 // FN2C
-                pos += 1;
                 coz_scope!("FN2C", {
-                    dbg_stack_in("FN2C", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("FN2C", pos, "".to_string(), stack);
                     let w = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
-                    let r = match call(
+                    let r = call(
                         stack,
                         2,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
                         Vn(Some(&w.into_v().unwrap())),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    )?;
                     stack.s.push(r);
-                    dbg_stack_out("FN2C", pos - 1, stack);
+                    dbg_stack_out("FN2C", pos, stack);
                 });
             }
-            19 => {
+            Bytecode::Fn2o => {
                 // FN2O
-                pos += 1;
                 coz_scope!("FN2O", {
-                    dbg_stack_in("FN2O", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("FN2O", pos, "".to_string(), stack);
                     let w = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
                     let r = match (&x.as_v().unwrap(), &w.as_v().unwrap()) {
                         (V::Nothing, _) => x,
-                        (_, V::Nothing) => match call(
+                        (_, V::Nothing) => call(
                             stack,
                             1,
                             Vn(Some(&f.into_v().unwrap())),
                             Vn(Some(&x.into_v().unwrap())),
                             Vn(None),
-                        ) {
-                            Ok(r) => r,
-                            Err(e) => break Err(e),
-                        },
-                        _ => match call(
+                        )?,
+                        _ => call(
                             stack,
                             2,
                             Vn(Some(&f.into_v().unwrap())),
                             Vn(Some(&x.into_v().unwrap())),
                             Vn(Some(&w.into_v().unwrap())),
-                        ) {
-                            Ok(r) => r,
-                            Err(e) => break Err(e),
-                        },
+                        )?,
                     };
                     stack.s.push(r);
-                    dbg_stack_out("FN2O", pos - 1, stack);
+                    dbg_stack_out("FN2O", pos, stack);
                 });
             }
-            20 => {
+            Bytecode::Tr2d => {
                 // TR2D
-                pos += 1;
                 coz_scope!("TR2D", {
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
-                    dbg_stack_in("TR2D", pos - 1, format!("{} {}", &g, &h), stack);
+                    dbg_stack_in("TR2D", pos, format!("{} {}", &g, &h), stack);
                     let t = Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None));
                     stack.s.push(t);
-                    dbg_stack_out("TR2D", pos - 1, stack);
+                    dbg_stack_out("TR2D", pos, stack);
                 });
             }
-            21 => {
+            Bytecode::Tr3d => {
                 // TR3D
-                pos += 1;
                 coz_scope!("TR3D", {
-                    dbg_stack_in("TR3D", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("TR3D", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
                     let t = Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None));
                     stack.s.push(t);
-                    dbg_stack_out("TR3D", pos - 1, stack);
+                    dbg_stack_out("TR3D", pos, stack);
                 });
             }
-            23 => {
+            Bytecode::Tr3o => {
                 // TR3O
-                pos += 1;
                 coz_scope!("TR3O", {
-                    dbg_stack_in("TR3O", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("TR3O", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
@@ -316,92 +278,68 @@ pub fn vm(
                         _ => Vs::V(V::Tr3(Cc::new(Tr3::new(f, g, h)), None)),
                     };
                     stack.s.push(t);
-                    dbg_stack_out("TR3O", pos - 1, stack);
+                    dbg_stack_out("TR3O", pos, stack);
                 });
             }
-            26 => {
+            Bytecode::Md1c => {
                 // MD1C
-                pos += 1;
                 coz_scope!("MD1C", {
-                    dbg_stack_in("MD1C", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("MD1C", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let m = stack.s.pop().unwrap();
-                    let r = match call1(stack, m.into_v().unwrap(), f.into_v().unwrap()) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    let r = call1(stack, m.into_v().unwrap(), f.into_v().unwrap())?;
                     stack.s.push(r);
-                    dbg_stack_out("MD1C", pos - 1, stack);
+                    dbg_stack_out("MD1C", pos, stack);
                 });
             }
-            27 => {
+            Bytecode::Md2c => {
                 // MD2C
-                pos += 1;
                 coz_scope!("MD2C", {
-                    dbg_stack_in("MD2C", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("MD2C", pos, "".to_string(), stack);
                     let f = stack.s.pop().unwrap();
                     let m = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
-                    let r = match call2(
+                    let r = call2(
                         stack,
                         m.into_v().unwrap(),
                         f.into_v().unwrap(),
                         g.into_v().unwrap(),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    )?;
                     stack.s.push(r);
-                    dbg_stack_out("MD2C", pos - 1, stack);
+                    dbg_stack_out("MD2C", pos, stack);
                 });
             }
-            32 => {
+            Bytecode::Varo { x, w } => {
                 // VARO
-                pos += 1;
                 coz_scope!("VARO", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    let w = *code.bc.get(pos).unwrap();
-                    pos += 1;
                     let t = env.ge(x);
-                    dbg_stack_in("VARO", pos - 3, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARO", pos, format!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::V(t.get(w)));
-                    dbg_stack_out("VARO", pos - 3, stack);
+                    dbg_stack_out("VARO", pos, stack);
                 });
             }
-            34 => {
+            Bytecode::Varu { x, w } => {
                 // VARU
-                pos += 1;
                 coz_scope!("VARU", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    let w = *code.bc.get(pos).unwrap();
-                    pos += 1;
                     let t = env.ge(x);
-                    dbg_stack_in("VARU", pos - 3, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARU", pos, format!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::V(t.get_drop(w)));
-                    dbg_stack_out("VARU", pos - 3, stack);
+                    dbg_stack_out("VARU", pos, stack);
                 });
             }
-            33 => {
+            Bytecode::Varm { x, w } => {
                 // VARM
-                pos += 1;
                 coz_scope!("VARM", {
-                    let x = *code.bc.get(pos).unwrap();
-                    pos += 1;
-                    let w = *code.bc.get(pos).unwrap();
-                    pos += 1;
                     let t = env.ge(x);
-                    dbg_stack_in("VARM", pos - 3, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARM", pos, format!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::Slot(t.clone(), w));
-                    dbg_stack_out("VARM", pos - 3, stack);
+                    dbg_stack_out("VARM", pos, stack);
                 });
             }
-            42 => {
+            Bytecode::Pred => {
                 // PRED
-                pos += 1;
                 coz_scope!("PRED", {
-                    dbg_stack_in("PRED", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("PRED", pos, "".to_string(), stack);
                     let pred = stack.s.pop().unwrap();
                     if let Vs::V(v) = &pred {
                         match &v {
@@ -411,7 +349,7 @@ pub fn vm(
                                 match (bodies, body_id) {
                                     (Some(b), Some(id)) => {
                                         let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
-                                        break vm(
+                                        return vm(
                                             &env.reinit(*locals),
                                             code,
                                             Some(b),
@@ -426,33 +364,30 @@ pub fn vm(
                             _ => panic!("PRED not 0 or 1"),
                         }
                     }
-                    dbg_stack_out("PRED", pos - 1, stack);
+                    dbg_stack_out("PRED", pos, stack);
                 });
             }
-            43 => {
+            Bytecode::Vfym => {
                 // VFYM
-                pos += 1;
                 coz_scope!("VFYM", {
                     let m = stack.s.pop().unwrap();
-                    dbg_stack_in("VFYM", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("VFYM", pos, "".to_string(), stack);
                     stack.s.push(Vs::Match(Some(m.into_v().unwrap())));
-                    dbg_stack_out("VFYM", pos - 1, stack);
+                    dbg_stack_out("VFYM", pos, stack);
                 });
             }
-            44 => {
+            Bytecode::Notm => {
                 // NOTM
-                pos += 1;
                 coz_scope!("NOTM", {
-                    dbg_stack_in("NOTM", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("NOTM", pos, "".to_string(), stack);
                     stack.s.push(Vs::Match(None));
-                    dbg_stack_out("NOTM", pos - 1, stack);
+                    dbg_stack_out("NOTM", pos, stack);
                 });
             }
-            47 => {
+            Bytecode::Seth => {
                 // SETH
-                pos += 1;
                 coz_scope!("SETH", {
-                    dbg_stack_in("SETH", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("SETH", pos, "".to_string(), stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     match i.set(true, v.as_v().unwrap()) {
@@ -462,7 +397,7 @@ pub fn vm(
                             match (bodies, body_id) {
                                 (Some(b), Some(id)) => {
                                     let (p, locals) = code.body_ids.get(b[id + 1]).unwrap();
-                                    break vm(
+                                    return vm(
                                         &env.reinit(*locals),
                                         code,
                                         Some(b),
@@ -475,82 +410,71 @@ pub fn vm(
                             };
                         }
                     }
-                    dbg_stack_out("SETH", pos - 1, stack);
+                    dbg_stack_out("SETH", pos, stack);
                 });
             }
-            48 => {
+            Bytecode::Setn => {
                 // SETN
-                pos += 1;
                 coz_scope!("SETN", {
-                    dbg_stack_in("SETN", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("SETN", pos, "".to_string(), stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     let r = i.set(true, v.as_v().unwrap())?;
                     stack.s.push(Vs::V(r));
-                    dbg_stack_out("SETN", pos - 1, stack);
+                    dbg_stack_out("SETN", pos, stack);
                 });
             }
-            49 => {
+            Bytecode::Setu => {
                 // SETU
-                pos += 1;
                 coz_scope!("SETU", {
-                    dbg_stack_in("SETU", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("SETU", pos, "".to_string(), stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     let r = i.set(false, v.as_v().unwrap())?;
                     stack.s.push(Vs::V(r));
-                    dbg_stack_out("SETU", pos - 1, stack);
+                    dbg_stack_out("SETU", pos, stack);
                 });
             }
-            50 => {
+            Bytecode::Setm => {
                 // SETM
-                pos += 1;
                 coz_scope!("SETM", {
-                    dbg_stack_in("SETM", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("SETM", pos, "".to_string(), stack);
                     let i = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
-                    let v = match call(
+                    let v = call(
                         stack,
                         2,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&x.into_v().unwrap())),
                         Vn(Some(&i.get())),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    )?;
                     let r = i.set(false, v.as_v().unwrap())?;
                     stack.s.push(Vs::V(r));
-                    dbg_stack_out("SETM", pos - 1, stack);
+                    dbg_stack_out("SETM", pos, stack);
                 });
             }
-            51 => {
+            Bytecode::Setc => {
                 // SETC
-                pos += 1;
                 coz_scope!("SETC", {
-                    dbg_stack_in("SETC", pos - 1, "".to_string(), stack);
+                    dbg_stack_in("SETC", pos, "".to_string(), stack);
                     let i = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
-                    let v = match call(
+                    let v = call(
                         stack,
                         1,
                         Vn(Some(&f.into_v().unwrap())),
                         Vn(Some(&i.get())),
                         Vn(None),
-                    ) {
-                        Ok(r) => r,
-                        Err(e) => break Err(e),
-                    };
+                    )?;
                     let r = i.set(false, v.as_v().unwrap())?;
                     stack.s.push(Vs::V(r));
-                    dbg_stack_out("SETC", pos - 1, stack);
+                    dbg_stack_out("SETC", pos, stack);
                 });
             }
-            _ => {
-                panic!("unreachable op: {}", code.bc[pos]);
-            }
+            b => unimplemented!("bytecode {b:?}"),
         }
+
         #[cfg(feature = "coz-loop")]
         coz::progress!();
     }
@@ -701,7 +625,7 @@ pub fn prog(
                     V::Scalar(n) => usize::from_f64(*n).unwrap(),
                     _ => panic!("bytecode not a number"),
                 })
-                .collect::<Vec<usize>>();
+                .collect();
             let objs = match objects.into_a().unwrap().try_unwrap() {
                 Ok(o) => o.r,
                 Err(_o) => panic!("objects not unique"),

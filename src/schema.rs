@@ -1,11 +1,8 @@
-use crate::late_init::LateInit;
-use crate::vm::vm;
+use crate::{late_init::LateInit, vm::vm};
 use bacon_rajan_cc::Cc;
 use enum_as_inner::EnumAsInner;
 
-use std::cell::RefCell;
-use std::fmt;
-use std::ops::Deref;
+use std::{cell::RefCell, fmt, iter, ops::Deref, slice};
 
 // Traits
 pub trait Calleable {
@@ -344,11 +341,12 @@ pub enum Bodies {
 // Code
 #[derive(Default, Debug, PartialEq)]
 pub struct Code {
-    pub bc: Vec<usize>,
+    bc: Vec<usize>,
     pub objs: Vec<V>,
     pub body_ids: Vec<(usize, usize)>,
     pub blocks: LateInit<Vec<Cc<Block>>>,
 }
+
 impl Code {
     pub fn new(
         bc: Vec<usize>,
@@ -379,7 +377,248 @@ impl Code {
         code.blocks.init(blocks_derv);
         code
     }
+
+    pub fn bytecodes(&self) -> BytecodeIter<'_> {
+        let bc = self.bc.iter().enumerate();
+        BytecodeIter { code: self, bc }
+    }
+
+    pub fn get_bc<R>(&self, range: R) -> CodeRef<'_>
+    where
+        R: slice::SliceIndex<[usize], Output = [usize]>,
+    {
+        let bc = &self.bc[range];
+
+        CodeRef { bc, code: self }
+    }
 }
+
+#[derive(Clone)]
+pub struct CodeRef<'a> {
+    bc: &'a [usize],
+    code: &'a Code,
+}
+
+impl<'a> CodeRef<'a> {
+    pub fn bytecodes(&self) -> BytecodeIter<'a> {
+        let Self { bc, code } = self;
+        let bc = bc.iter().enumerate();
+        BytecodeIter { code, bc }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BytecodeIter<'a> {
+    code: &'a Code,
+    bc: iter::Enumerate<slice::Iter<'a, usize>>,
+}
+
+impl<'a> BytecodeIter<'a> {
+    fn get_next_value(&mut self) -> Result<usize, BytecodeError> {
+        self.bc
+            .next()
+            .map(|(_, &index)| index)
+            .ok_or(BytecodeError::UnexpectedEnd)
+    }
+
+    fn get_next_object(&mut self) -> Result<(usize, &'a V), BytecodeError> {
+        self.get_next_value().and_then(|pos| {
+            self.code
+                .objs
+                .get(pos)
+                .map(|obj| (pos, obj))
+                .ok_or(BytecodeError::InvalidObject(pos))
+        })
+    }
+
+    fn get_next_block(&mut self) -> Result<(usize, &'a Cc<Block>), BytecodeError> {
+        self.get_next_value().and_then(|pos| {
+            self.code
+                .blocks
+                .get(pos)
+                .map(|obj| (pos, obj))
+                .ok_or(BytecodeError::InvalidBlock(pos))
+        })
+    }
+
+    fn get_next_two_values(&mut self) -> Result<[usize; 2], BytecodeError> {
+        self.get_next_value()
+            .and_then(|x| self.get_next_value().map(|w| [x, w]))
+    }
+}
+
+impl<'a> Iterator for BytecodeIter<'a> {
+    type Item = Result<(usize, Bytecode<'a>), BytecodeError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.bc.next().map(|(pos, value)| {
+            let out = match value {
+                0x00 => self
+                    .get_next_object()
+                    .map(|(index, obj)| Bytecode::Push(index, obj)),
+                0x01 => self
+                    .get_next_block()
+                    .map(|(index, block)| Bytecode::Dfnd(index, block)),
+                0x02 => Ok(Bytecode::Sysv),
+
+                0x06 => Ok(Bytecode::Pops),
+                0x07 => Ok(Bytecode::Retn),
+                0x08 => Ok(Bytecode::Retd),
+                0x0B => self.get_next_value().map(Bytecode::Lsto),
+                0x0C => self.get_next_value().map(Bytecode::Lstm),
+                0x0D => Ok(Bytecode::Armo),
+                0x0E => Ok(Bytecode::Armm),
+
+                0x10 => Ok(Bytecode::Fn1c),
+                0x11 => Ok(Bytecode::Fn2c),
+                0x12 => Ok(Bytecode::Fn1o),
+                0x13 => Ok(Bytecode::Fn2o),
+                0x14 => Ok(Bytecode::Tr2d),
+                0x15 => Ok(Bytecode::Tr3d),
+                0x16 => Ok(Bytecode::Chkv),
+                0x17 => Ok(Bytecode::Tr3o),
+
+                0x1A => Ok(Bytecode::Md1c),
+                0x1B => Ok(Bytecode::Md2c),
+                0x1C => Ok(Bytecode::Md2l),
+                0x1D => Ok(Bytecode::Md2r),
+
+                0x20 => self
+                    .get_next_two_values()
+                    .map(|[x, w]| Bytecode::Varo { x, w }),
+                0x21 => self
+                    .get_next_two_values()
+                    .map(|[x, w]| Bytecode::Varm { x, w }),
+                0x22 => self
+                    .get_next_two_values()
+                    .map(|[x, w]| Bytecode::Varu { x, w }),
+                0x26 => Ok(Bytecode::Dyno),
+                0x27 => Ok(Bytecode::Dynm),
+
+                0x2A => Ok(Bytecode::Pred),
+                0x2B => Ok(Bytecode::Vfym),
+                0x2C => Ok(Bytecode::Notm),
+                0x2F => Ok(Bytecode::Seth),
+                0x30 => Ok(Bytecode::Setn),
+                0x31 => Ok(Bytecode::Setu),
+                0x32 => Ok(Bytecode::Setm),
+                0x33 => Ok(Bytecode::Setc),
+                0x40 => Ok(Bytecode::Fldo),
+                0x41 => Ok(Bytecode::Fldm),
+                0x42 => Ok(Bytecode::Alim),
+                _ => Err(BytecodeError::InvalidBytecode(*value)),
+            };
+            out.map(|out| (pos, out))
+        })
+    }
+}
+
+#[repr(u8)]
+#[derive(Debug)]
+pub enum Bytecode<'a> {
+    /// N; push object from objs[N]
+    Push(usize, &'a V) = 0x00,
+    /// N; push dfns[N], derived to current scope
+    Dfnd(usize, &'a Cc<Block>) = 0x01,
+    /// N; get system function N
+    Sysv = 0x02,
+
+    /// pop object from stack
+    Pops = 0x06,
+    /// returns top of stack
+    Retn = 0x07,
+    /// return a namespace of exported items
+    Retd = 0x08,
+    /// N; create a vector of top N items
+    Lsto(usize) = 0x0B,
+    /// N; create a mutable vector of top N items
+    Lstm(usize) = 0x0C,
+    /// push `>ToS`
+    Armo = 0x0D,
+    /// push a mutable version of `>ToS` that unpacks cells of what its assigned to
+    Armm = 0x0E,
+
+    /// monadic function call ⟨…,x,f  ⟩ → F x
+    Fn1c = 0x10,
+    ///  dyadic function call ⟨…,x,f,w⟩ → w F x
+    Fn2c = 0x11,
+    /// optional monadic call (FN1C but checks for · at 𝕩)
+    Fn1o = 0x12,
+    /// optional  dyadic call (FN2C but checks for · at 𝕩 & 𝕨)
+    Fn2o = 0x13,
+    /// derive 2-train aka atop; ⟨…,  g,f⟩ → (f g)
+    Tr2d = 0x14,
+    /// derive 3-train aka fork; ⟨…,h,g,f⟩ → (f g h)
+    Tr3d = 0x15,
+    /// throw error if top of stack is ·
+    Chkv = 0x16,
+    /// TR3D but creates an atop if F is ·
+    Tr3o = 0x17,
+
+    /// call/derive 1-modifier; ⟨…,  _m,f⟩ → (f _m)
+    Md1c = 0x1A,
+    /// call/derive 2-modifier; ⟨…,g,_m,f⟩ → (f _m_ g)
+    Md2c = 0x1B,
+    /// derive 2-modifier to 1-modifier with 𝔽 ⟨…,_m_,f⟩ → (f _m_)
+    Md2l = 0x1C,
+    /// derive 2-modifier to 1-modifier with 𝔾 ⟨…,g,_m_⟩ → (_m_ g)
+    Md2r = 0x1D,
+
+    /// N0,N1; push variable at depth N0 and position N1
+    Varo { x: usize, w: usize } = 0x20,
+    /// N0,N1; push mutable variable at depth N0 and position N1
+    Varm { x: usize, w: usize } = 0x21,
+    /// N0,N1; like VARO but overrides the slot with bi_optOut
+    Varu { x: usize, w: usize } = 0x22,
+    /// N; push variable with name objs[N]
+    Dyno = 0x26,
+    /// N; push mutable variable with name objs[N]
+    Dynm = 0x27,
+
+    /// pop item, go to next body if 0, continue if 1
+    Pred = 0x2A,
+    /// push a mutable version of ToS that fails if set to a non-equal value (for header assignment)
+    Vfym = 0x2B,
+    /// push a mutable "·" that ignores whatever it's assigned to and always succeeds
+    Notm = 0x2C,
+    /// set header; acts like SETN, but it doesn't push to stack, and, instead of erroring in cases it would, it skips to the next body
+    Seth = 0x2F,
+    /// set new; _  ←_; ⟨…,x,  mut⟩ → mut←x
+    Setn = 0x30,
+    /// set upd; _  ↩_; ⟨…,x,  mut⟩ → mut↩x
+    Setu = 0x31,
+    /// set mod; _ F↩_; ⟨…,x,F,mut⟩ → mut F↩x
+    Setm = 0x32,
+    /// set call; _ F↩; (…,  F,mut) → mut F↩
+    Setc = 0x33,
+    /// N; get field nameList[N] from ToS
+    Fldo = 0x40,
+    /// N; get mutable field nameList[N] from ToS
+    Fldm = 0x41,
+    /// N; replace ToS with one with a namespace field alias N
+    Alim = 0x42,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BytecodeError {
+    InvalidBytecode(usize),
+    UnexpectedEnd,
+    InvalidObject(usize),
+    InvalidBlock(usize),
+}
+
+impl fmt::Display for BytecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidBytecode(code) => write!(f, "invalid bytecode 0x{code:x}"),
+            Self::UnexpectedEnd => f.write_str("unexpected end of data"),
+            Self::InvalidObject(index) => write!(f, "invalid object index {index}"),
+            Self::InvalidBlock(index) => write!(f, "invalid block index {index}"),
+        }
+    }
+}
+
+impl std::error::Error for BytecodeError {}
 
 // Block
 #[derive(Debug, PartialEq)]
@@ -522,9 +761,7 @@ impl Env {
     pub fn extend(&self, vars: usize) {
         match self {
             Env(e) => {
-                e.vars
-                    .borrow_mut()
-                    .extend(std::iter::repeat(None).take(vars));
+                e.vars.borrow_mut().extend(iter::repeat(None).take(vars));
             }
         }
     }
