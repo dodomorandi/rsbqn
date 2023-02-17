@@ -112,7 +112,7 @@ pub fn vm(
             Bytecode::Push(x, r) => {
                 // PUSH
                 coz_scope!("PUSH", {
-                    dbg_stack_in("PUSH", pos, format!("{} {}", &x, &r), stack);
+                    dbg_stack_in("PUSH", pos, format_args!("{} {}", &x, &r), stack);
                     stack.s.push(Vs::V(r.clone()));
                     dbg_stack_out("PUSH", pos, stack);
                 });
@@ -120,7 +120,7 @@ pub fn vm(
             Bytecode::Dfnd(x, block) => {
                 // DFND
                 coz_scope!("DFND", {
-                    dbg_stack_in("DFND", pos, format!("{}", &x), stack);
+                    dbg_stack_in("DFND", pos, format_args!("{}", &x), stack);
                     let r = derv(env, code, block, stack)?;
                     stack.s.push(r);
                     dbg_stack_out("DFND", pos, stack);
@@ -129,7 +129,7 @@ pub fn vm(
             Bytecode::Pops => {
                 // POPS
                 coz_scope!("POPS", {
-                    dbg_stack_in("POPS", pos, "".to_string(), stack);
+                    dbg_stack_in("POPS", pos, "", stack);
                     let _ = stack.s.pop().unwrap();
                     dbg_stack_out("POPS", pos, stack);
                 });
@@ -138,14 +138,14 @@ pub fn vm(
                 // RETN
                 {}
                 coz_scope!("RETN", {
-                    dbg_stack_in("RETN", pos, "".to_string(), stack);
+                    dbg_stack_in("RETN", pos, "", stack);
                 });
                 return Ok(stack.s.pop().unwrap());
             }
             Bytecode::Lsto(x) => {
                 // LSTO
                 coz_scope!("LSTO", {
-                    dbg_stack_in("LSTO", pos, format!("{}", &x), stack);
+                    dbg_stack_in("LSTO", pos, format_args!("{}", &x), stack);
                     let v = stack.s.pop_list(x);
                     stack.s.push(llst(v));
                     dbg_stack_out("LSTO", pos, stack);
@@ -154,7 +154,7 @@ pub fn vm(
             Bytecode::Lstm(x) => {
                 // LSTM
                 coz_scope!("LSTM", {
-                    dbg_stack_in("LSTM", pos, format!("{}", &x), stack);
+                    dbg_stack_in("LSTM", pos, format_args!("{}", &x), stack);
                     let v = stack.s.pop_ref_list(x);
                     stack.s.push(Vs::Ar(Ar::new(v)));
                     dbg_stack_out("LSTM", pos, stack);
@@ -163,7 +163,7 @@ pub fn vm(
             Bytecode::Fn1c => {
                 // FN1C
                 coz_scope!("FN1C", {
-                    dbg_stack_in("FN1C", pos, "".to_string(), stack);
+                    dbg_stack_in("FN1C", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
                     let r = call(
@@ -180,7 +180,7 @@ pub fn vm(
             Bytecode::Fn1o => {
                 // FN1O
                 coz_scope!("FN1O", {
-                    dbg_stack_in("FN1O", pos, "".to_string(), stack);
+                    dbg_stack_in("FN1O", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
                     let r = match &x.as_v().unwrap() {
@@ -200,7 +200,7 @@ pub fn vm(
             Bytecode::Fn2c => {
                 // FN2C
                 coz_scope!("FN2C", {
-                    dbg_stack_in("FN2C", pos, "".to_string(), stack);
+                    dbg_stack_in("FN2C", pos, "", stack);
                     let w = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
@@ -218,7 +218,7 @@ pub fn vm(
             Bytecode::Fn2o => {
                 // FN2O
                 coz_scope!("FN2O", {
-                    dbg_stack_in("FN2O", pos, "".to_string(), stack);
+                    dbg_stack_in("FN2O", pos, "", stack);
                     let w = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
@@ -248,7 +248,7 @@ pub fn vm(
                 coz_scope!("TR2D", {
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
-                    dbg_stack_in("TR2D", pos, format!("{} {}", &g, &h), stack);
+                    dbg_stack_in("TR2D", pos, format_args!("{} {}", &g, &h), stack);
                     let t = Vs::V(V::Tr2(Cc::new(Tr2::new(g, h)), None));
                     stack.s.push(t);
                     dbg_stack_out("TR2D", pos, stack);
@@ -257,7 +257,7 @@ pub fn vm(
             Bytecode::Tr3d => {
                 // TR3D
                 coz_scope!("TR3D", {
-                    dbg_stack_in("TR3D", pos, "".to_string(), stack);
+                    dbg_stack_in("TR3D", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
@@ -269,7 +269,7 @@ pub fn vm(
             Bytecode::Tr3o => {
                 // TR3O
                 coz_scope!("TR3O", {
-                    dbg_stack_in("TR3O", pos, "".to_string(), stack);
+                    dbg_stack_in("TR3O", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
                     let h = stack.s.pop().unwrap();
@@ -284,7 +284,7 @@ pub fn vm(
             Bytecode::Md1c => {
                 // MD1C
                 coz_scope!("MD1C", {
-                    dbg_stack_in("MD1C", pos, "".to_string(), stack);
+                    dbg_stack_in("MD1C", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let m = stack.s.pop().unwrap();
                     let r = call1(stack, m.into_v().unwrap(), f.into_v().unwrap())?;
@@ -295,7 +295,7 @@ pub fn vm(
             Bytecode::Md2c => {
                 // MD2C
                 coz_scope!("MD2C", {
-                    dbg_stack_in("MD2C", pos, "".to_string(), stack);
+                    dbg_stack_in("MD2C", pos, "", stack);
                     let f = stack.s.pop().unwrap();
                     let m = stack.s.pop().unwrap();
                     let g = stack.s.pop().unwrap();
@@ -313,7 +313,7 @@ pub fn vm(
                 // VARO
                 coz_scope!("VARO", {
                     let t = env.ge(x);
-                    dbg_stack_in("VARO", pos, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARO", pos, format_args!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::V(t.get(w)));
                     dbg_stack_out("VARO", pos, stack);
                 });
@@ -322,7 +322,7 @@ pub fn vm(
                 // VARU
                 coz_scope!("VARU", {
                     let t = env.ge(x);
-                    dbg_stack_in("VARU", pos, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARU", pos, format_args!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::V(t.get_drop(w)));
                     dbg_stack_out("VARU", pos, stack);
                 });
@@ -331,7 +331,7 @@ pub fn vm(
                 // VARM
                 coz_scope!("VARM", {
                     let t = env.ge(x);
-                    dbg_stack_in("VARM", pos, format!("{} {}", &x, &w), stack);
+                    dbg_stack_in("VARM", pos, format_args!("{} {}", &x, &w), stack);
                     stack.s.push(Vs::Slot(t.clone(), w));
                     dbg_stack_out("VARM", pos, stack);
                 });
@@ -339,7 +339,7 @@ pub fn vm(
             Bytecode::Pred => {
                 // PRED
                 coz_scope!("PRED", {
-                    dbg_stack_in("PRED", pos, "".to_string(), stack);
+                    dbg_stack_in("PRED", pos, "", stack);
                     let pred = stack.s.pop().unwrap();
                     if let Vs::V(v) = &pred {
                         match &v {
@@ -371,7 +371,7 @@ pub fn vm(
                 // VFYM
                 coz_scope!("VFYM", {
                     let m = stack.s.pop().unwrap();
-                    dbg_stack_in("VFYM", pos, "".to_string(), stack);
+                    dbg_stack_in("VFYM", pos, "", stack);
                     stack.s.push(Vs::Match(Some(m.into_v().unwrap())));
                     dbg_stack_out("VFYM", pos, stack);
                 });
@@ -379,7 +379,7 @@ pub fn vm(
             Bytecode::Notm => {
                 // NOTM
                 coz_scope!("NOTM", {
-                    dbg_stack_in("NOTM", pos, "".to_string(), stack);
+                    dbg_stack_in("NOTM", pos, "", stack);
                     stack.s.push(Vs::Match(None));
                     dbg_stack_out("NOTM", pos, stack);
                 });
@@ -387,7 +387,7 @@ pub fn vm(
             Bytecode::Seth => {
                 // SETH
                 coz_scope!("SETH", {
-                    dbg_stack_in("SETH", pos, "".to_string(), stack);
+                    dbg_stack_in("SETH", pos, "", stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     match i.set(true, v.as_v().unwrap()) {
@@ -416,7 +416,7 @@ pub fn vm(
             Bytecode::Setn => {
                 // SETN
                 coz_scope!("SETN", {
-                    dbg_stack_in("SETN", pos, "".to_string(), stack);
+                    dbg_stack_in("SETN", pos, "", stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     let r = i.set(true, v.as_v().unwrap())?;
@@ -427,7 +427,7 @@ pub fn vm(
             Bytecode::Setu => {
                 // SETU
                 coz_scope!("SETU", {
-                    dbg_stack_in("SETU", pos, "".to_string(), stack);
+                    dbg_stack_in("SETU", pos, "", stack);
                     let i = stack.s.pop().unwrap();
                     let v = stack.s.pop().unwrap();
                     let r = i.set(false, v.as_v().unwrap())?;
@@ -438,7 +438,7 @@ pub fn vm(
             Bytecode::Setm => {
                 // SETM
                 coz_scope!("SETM", {
-                    dbg_stack_in("SETM", pos, "".to_string(), stack);
+                    dbg_stack_in("SETM", pos, "", stack);
                     let i = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let x = stack.s.pop().unwrap();
@@ -457,7 +457,7 @@ pub fn vm(
             Bytecode::Setc => {
                 // SETC
                 coz_scope!("SETC", {
-                    dbg_stack_in("SETC", pos, "".to_string(), stack);
+                    dbg_stack_in("SETC", pos, "", stack);
                     let i = stack.s.pop().unwrap();
                     let f = stack.s.pop().unwrap();
                     let v = call(
