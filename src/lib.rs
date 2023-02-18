@@ -1,14 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod fmt;
 mod late_init;
 pub mod provide;
+pub mod runtime;
 pub mod schema;
 mod trace;
 pub mod vm;
-pub mod gen {
-    pub mod code;
-}
-pub mod fmt;
 
 // https://docs.rs/env_logger/0.7.1/env_logger/#capturing-logs-in-tests
 pub fn init_log() {

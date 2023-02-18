@@ -6,7 +6,6 @@ RSBQN is a Rust implementation of a BQN virtual machine.
 Build
 ------
 
-    git restore --source origin/BYTECODE -- src/gen/code.rs
     cargo build --features repl
 
 Status
@@ -32,7 +31,7 @@ Test
 -----
 
     escript gen_test.erl /path/to/mlochbaum/bqn
-    escript gen_code.erl /path/to/mlochbaum/bqn
+    cargo gen-runtime /path/to/mlochbaum/bqn
 
     cargo test
 

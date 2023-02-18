@@ -55,3 +55,6 @@ repl = ["rustyline"] # include rsbqn repl
 coz-fns = ["coz"]
 coz-ops = ["coz"]
 coz-loop = ["coz"]
+
+[workspace]
+members = ["gen-runtime"]

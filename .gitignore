@@ -3,6 +3,5 @@
 /target
 Cargo.lock
 tests/*
-src/gen/code.rs
 profile.coz
 dhat-heap.json

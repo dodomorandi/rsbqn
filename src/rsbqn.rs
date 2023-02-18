@@ -1,7 +1,7 @@
 use bacon_rajan_cc::Cc;
 use log::info;
+use rsbqn::code::c;
 use rsbqn::fmt::{fmt_err, fmt_result};
-use rsbqn::gen::code::c;
 use rsbqn::init_log;
 use rsbqn::schema::{new_string, Env, Stack, Ve, Vn, A, V};
 use rsbqn::vm::{call, formatter, prog, run, run_in_place, runtime};

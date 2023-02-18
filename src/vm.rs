@@ -1,5 +1,5 @@
 use crate::fmt::{dbg_stack_in, dbg_stack_out};
-use crate::gen::code::{f, r0, r1};
+use crate::runtime::{f, r0, r1};
 
 use crate::coz_scope;
 use crate::provide::{decompose, fmtnum, glyph, prim_ind, provide, typ};
