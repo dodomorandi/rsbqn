@@ -57,4 +57,4 @@ coz-ops = ["coz"]
 coz-loop = ["coz"]
 
 [workspace]
-members = ["gen-runtime"]
+members = ["gen-runtime", "gen-test"]
